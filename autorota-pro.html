@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0E0F12" />
+<title>AutoRota Pro · Autocani</title>
+
+<!-- React + Babel (transpila o JSX no navegador; site estático, sem build) -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- Firebase (compat: expõe global `firebase`, funciona em arquivo único) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+/* ==== paleta / base ==== */
+:root{
+  --bg:#0E0F12; --panel:#16181D; --panel2:#1E2128; --line:#2A2E37; --line2:#363B47;
+  --text:#E9EBEF; --mut:#8A909B; --mut2:#5C616C;
+  --amber:#F4A724; --green:#34D399; --blue:#5AA9FF; --red:#FB6464; --violet:#A78BFA;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',ui-sans-serif,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+input,select,button{font-family:inherit}
+a{color:inherit}
+
+/* ==== shell ==== */
+.shell{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+.main{padding:24px 30px 60px;max-width:1180px}
+
+/* rail */
+.rail{background:var(--panel);border-right:1px solid var(--line);padding:18px 16px;display:flex;flex-direction:column;gap:16px;position:sticky;top:0;height:100vh}
+.brand{display:flex;gap:11px;align-items:center}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--amber);display:grid;place-items:center;box-shadow:0 0 0 4px rgba(244,167,36,.13);font-weight:800;color:var(--bg)}
+.brand-name{font-weight:700;font-size:15px;letter-spacing:-.2px}
+.brand-sub{font-size:10px;color:var(--mut2);text-transform:uppercase;letter-spacing:1px}
+.seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:transparent;color:var(--mut);font-size:12px;font-weight:600;padding:7px;border-radius:6px;cursor:pointer}
+.seg button.on{background:var(--panel2);color:var(--text)}
+.nav{display:flex;flex-direction:column;gap:3px}
+.navbtn{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;border:0;background:transparent;color:var(--mut);font-size:13.5px;font-weight:500;cursor:pointer;text-align:left;width:100%}
+.navbtn:hover{background:var(--panel2);color:var(--text)}
+.navbtn.on{background:rgba(244,167,36,.11);color:var(--amber);font-weight:600}
+.rail-foot{margin-top:auto;display:flex;flex-direction:column;gap:12px}
+.who{font-size:12px;color:var(--mut)}
+.who b{color:var(--text);display:block;font-size:13px}
+.signout{background:transparent;border:1px solid var(--line2);color:var(--mut);font-size:12px;font-weight:600;padding:8px;border-radius:8px;cursor:pointer}
+.live{font-size:11px;color:var(--mut);display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:99px;background:var(--green);animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}70%{box-shadow:0 0 0 7px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+
+/* header */
+.head{margin-bottom:20px}
+.head h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.4px}
+.head p{margin:4px 0 0;color:var(--mut);font-size:13px}
+
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:15px}
+.kpi.wide{grid-column:1/-1;display:flex;align-items:center;gap:14px;background:linear-gradient(90deg,rgba(52,211,153,.07),var(--panel) 55%)}
+.kpi.alert{border-color:rgba(251,100,100,.35)}
+.kpi-ico{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;margin-bottom:11px}
+.kpi.wide .kpi-ico{margin-bottom:0}
+.kpi-val{font-size:24px;font-weight:600;letter-spacing:-.5px}
+.kpi-lab{font-size:11.5px;color:var(--mut);margin-top:2px}
+.kpi.wide .kpi-lab{margin-top:0;margin-left:auto}
+
+/* cards / grids */
+.grid2{display:grid;grid-template-columns:1.15fr 1fr;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:17px 18px}
+.card-title{font-weight:600;font-size:14.5px}
+.card-sub{font-size:11.5px;color:var(--mut);margin-top:2px;margin-bottom:14px}
+
+/* ranking mini */
+.rkrow{display:grid;grid-template-columns:28px 1fr 90px 56px;align-items:center;gap:10px;margin-bottom:13px}
+.rkpos{font-weight:700;font-size:13px}
+.rkbar{background:var(--bg);border-radius:99px;height:7px;overflow:hidden}
+.rkbar.full{height:8px;margin:8px 0 12px}
+.rkbar>div{height:100%;border-radius:99px;transition:width .4s}
+.rkpts{text-align:right;font-size:12.5px;font-weight:600}
+
+/* toolbar / table */
+.toolbar{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.search{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;flex:1;min-width:220px;max-width:360px}
+.search input{background:transparent;border:0;outline:0;color:var(--text);font-size:13px;width:100%}
+.newbtn{display:inline-flex;align-items:center;gap:6px;background:var(--amber);color:var(--bg);border:0;font-weight:700;font-size:12.5px;padding:9px 14px;border-radius:10px;cursor:pointer;white-space:nowrap}
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chip{background:var(--panel);border:1px solid var(--line);color:var(--mut);font-size:12px;font-weight:500;padding:7px 12px;border-radius:99px;cursor:pointer}
+.chip.on{background:rgba(244,167,36,.11);border-color:rgba(244,167,36,.33);color:var(--amber)}
+.tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.trow{display:grid;grid-template-columns:70px 1fr 64px 100px 92px 150px 120px;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--line);font-size:13px}
+.trow.cli{grid-template-columns:1.3fr 1fr 80px 120px 110px 170px}
+.trow.usr{grid-template-columns:1.2fr 1.4fr 110px 90px 130px}
+.trow:last-child{border-bottom:0}
+.thead{background:var(--bg);color:var(--mut2);font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:600}
+.sub2{color:var(--mut);font-size:12px}
+.store,.tier{font-size:11px;font-weight:700;border:1px solid;border-radius:6px;padding:2px 8px}
+.badge{font-size:11px;font-weight:600;border:1px solid;border-radius:99px;padding:4px 10px;white-space:nowrap}
+.mini{display:inline-flex;align-items:center;gap:3px;background:transparent;border:1px solid var(--line2);color:var(--mut);font-size:11.5px;font-weight:600;padding:5px 9px;border-radius:7px;cursor:pointer}
+.mini.on{background:rgba(244,167,36,.11);border-color:rgba(244,167,36,.33);color:var(--amber)}
+.empty{padding:30px;text-align:center;color:var(--mut);font-size:13px}
+
+/* rotas */
+.rota-tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.rota-tab{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);color:var(--mut);font-size:13px;font-weight:500;padding:9px 14px;border-radius:10px;cursor:pointer}
+.rota-tab.on{border-color:rgba(244,167,36,.4);color:var(--amber);background:rgba(244,167,36,.08)}
+.rota-n{background:var(--bg);border-radius:99px;padding:1px 8px;font-size:11px;font-weight:700}
+.grid-rota{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:start}
+.rota-side{display:flex;flex-direction:column;gap:14px}
+.stop{display:grid;grid-template-columns:30px 1fr;gap:12px}
+.stop-rail{display:flex;flex-direction:column;align-items:center}
+.stop-dot{width:26px;height:26px;border-radius:99px;border:2px solid var(--amber);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--amber);background:rgba(244,167,36,.08)}
+.stop-line{width:2px;flex:1;background:var(--line2);margin:2px 0;min-height:18px}
+.stop-body{padding-bottom:16px}
+.stop-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.cta{display:flex;align-items:center;justify-content:center;gap:9px;background:var(--amber);color:var(--bg);font-weight:700;font-size:13.5px;padding:12px;border-radius:11px;text-decoration:none;margin-top:4px}
+.resumo-l{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;color:var(--mut)}
+.resumo-l:last-child{border-bottom:0}
+.resumo-l b{color:var(--text);font-size:15px}
+
+/* ranking full */
+.rkcard{display:flex;gap:16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-bottom:11px}
+.rkcard.lead{border-color:rgba(244,167,36,.33);background:linear-gradient(90deg,rgba(244,167,36,.06),var(--panel) 60%)}
+.rkbig{font-size:34px;font-weight:800;width:40px;text-align:center;font-family:'JetBrains Mono',monospace}
+.rkhead{display:flex;justify-content:space-between;align-items:baseline}
+.rkstats{display:flex;gap:26px}
+.stat b{font-size:16px;display:block}
+.stat span{font-size:11px;color:var(--mut)}
+
+/* transferências */
+.tf-list{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tf{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.tf-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.tf-rota{display:flex;align-items:center;gap:9px}
+.tf-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-bottom:12px}
+.tf-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.tf-item:first-child{border-top:1px solid var(--line)}
+.tf-item:last-child{border-bottom:0}
+.tf-receber{width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(52,211,153,.11);border:1px solid rgba(52,211,153,.33);color:var(--green);font-weight:700;font-size:13px;padding:11px;border-radius:10px;cursor:pointer}
+
+/* motorista */
+.driver{max-width:460px;margin:0 auto}
+.driver-head{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.driver-stats{margin-left:auto;display:flex;gap:16px}
+.driver-stats>div{text-align:center}
+.driver-stats b{display:block;font-size:19px;font-family:'JetBrains Mono',monospace}
+.driver-stats span{font-size:10.5px;color:var(--mut)}
+.next{background:var(--panel);border:1px solid var(--line2);border-radius:16px;padding:20px}
+.next-tag{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--amber);font-weight:700;margin-bottom:8px}
+.next-cli{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.next-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.act{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:12px 4px;color:var(--text);text-decoration:none;cursor:pointer;font-size:10.5px}
+.confirm{width:100%;display:flex;align-items:center;justify-content:center;gap:9px;background:var(--green);color:#05230f;border:0;font-weight:700;font-size:14.5px;padding:14px;border-radius:12px;cursor:pointer}
+.dcard{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 15px;margin-bottom:8px}
+.label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--mut2);margin:22px 0 8px}
+
+/* modal / form */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:grid;place-items:center;padding:20px;z-index:50}
+.modal{background:var(--panel);border:1px solid var(--line2);border-radius:16px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.6);max-height:92vh;overflow:auto}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;padding:18px 20px;border-bottom:1px solid var(--line)}
+.modal-title{font-size:16px;font-weight:700}
+.modal-x{background:var(--bg);border:1px solid var(--line);color:var(--mut);border-radius:8px;width:32px;height:32px;display:grid;place-items:center;cursor:pointer;font-size:16px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:18px 20px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field.full{grid-column:span 2}
+.field span{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
+.field input,.field select{background:var(--bg);border:1px solid var(--line2);border-radius:9px;padding:10px 11px;color:var(--text);font-size:13.5px;outline:none}
+.field input:focus,.field select:focus{border-color:rgba(244,167,36,.53)}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:16px 20px;border-top:1px solid var(--line)}
+.btn-ghost{background:transparent;border:1px solid var(--line2);color:var(--mut);font-weight:600;font-size:13px;padding:10px 16px;border-radius:10px;cursor:pointer}
+.btn-amber{background:var(--amber);border:0;color:var(--bg);font-weight:700;font-size:13px;padding:10px 18px;border-radius:10px;cursor:pointer}
+.btn-amber:disabled{opacity:.4;cursor:not-allowed}
+
+/* login / setup / no-access */
+.gate{min-height:100vh;display:grid;place-items:center;padding:24px}
+.gate-card{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:30px}
+.gate-logo{width:48px;height:48px;border-radius:12px;background:var(--amber);display:grid;place-items:center;color:var(--bg);font-weight:800;font-size:20px;margin-bottom:18px}
+.gate-card h2{margin:0 0 4px;font-size:20px}
+.gate-card p{margin:0 0 22px;color:var(--mut);font-size:13px}
+.gate-field{margin-bottom:12px}
+.gate-field label{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+.gate-field input{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:12px;color:var(--text);font-size:14px;outline:none}
+.gate-field input:focus{border-color:rgba(244,167,36,.53)}
+.gate-btn{width:100%;background:var(--amber);color:var(--bg);border:0;font-weight:700;font-size:14px;padding:13px;border-radius:11px;cursor:pointer;margin-top:6px}
+.gate-btn:disabled{opacity:.5}
+.gate-err{background:rgba(251,100,100,.1);border:1px solid rgba(251,100,100,.35);color:var(--red);font-size:12.5px;padding:10px 12px;border-radius:9px;margin-bottom:14px}
+.gate-note{font-size:12px;color:var(--mut);line-height:1.6;margin-top:16px}
+.gate-note code{background:var(--bg);padding:1px 6px;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--amber)}
+.spin{width:34px;height:34px;border:3px solid var(--line2);border-top-color:var(--amber);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* IMPORTAR CSV */
+.csv-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px 20px;border:2px dashed var(--line2);border-radius:14px;cursor:pointer;background:var(--bg)}
+.csv-drop:hover{border-color:rgba(244,167,36,.5)}
+.csv-ta{width:100%;min-height:96px;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:11px;color:var(--text);font-size:12.5px;font-family:'JetBrains Mono',monospace;outline:none;resize:vertical}
+.csv-ta:focus{border-color:rgba(244,167,36,.53)}
+.csv-resumo{display:flex;gap:26px;margin-bottom:14px}
+.csv-resumo b{display:block;font-size:22px}
+.csv-resumo span{font-size:11.5px;color:var(--mut)}
+.csv-prev{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.csv-prev-l{display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:12.5px}
+.csv-prev-l:last-child{border-bottom:0}
+
+@media(max-width:920px){
+  .shell{grid-template-columns:1fr}
+  .rail{position:relative;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center}
+  .nav{flex-direction:row;flex-wrap:wrap}
+  .rail-foot{margin-top:0;flex-direction:row;width:100%;justify-content:space-between;align-items:center}
+  .main{padding:18px 14px 50px}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .grid2,.grid-rota,.form,.tf-list{grid-template-columns:1fr}
+  .field.full{grid-column:span 1}
+  .trow{grid-template-columns:1fr;gap:4px}
+  .thead{display:none}
+  .next-actions{grid-template-columns:repeat(4,1fr)}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- ============================================================= -->
+<!-- COLE AQUI A CONFIG DO SEU PROJETO FIREBASE (Console > Config)  -->
+<!-- ============================================================= -->
+<script>
+  window.__FIREBASE_CONFIG__ = {
+    apiKey: "AIzaSyDGrmH5ZUUu1VeaQe1w_45Eupyq83DF7cE",
+    authDomain: "autorota-autocani.firebaseapp.com",
+    projectId: "autorota-autocani",
+    storageBucket: "autorota-autocani.firebasestorage.app",
+    messagingSenderId: "1071153917889",
+    appId: "1:1071153917889:web:fbe8d010842193885dc940"
+  };
+</script>
+
+<script type="text/plain" id="app-src">
+const { useState, useMemo, useEffect } = React;
+
+/* ===================== Firebase init ===================== */
+const CFG = window.__FIREBASE_CONFIG__;
+const CONFIG_OK = CFG && !JSON.stringify(CFG).includes("COLE_AQUI");
+let auth = null, db = null;
+if (CONFIG_OK) {
+  firebase.initializeApp(CFG);
+  auth = firebase.auth();
+  db = firebase.firestore();
+}
+
+/* ===================== Constantes de negócio ===================== */
+const STORES = {
+  COL:{sigla:"COL",nome:"Autocani · Colatina",cor:"var(--amber)"},
+  BSF:{sigla:"BSF",nome:"Colapeças · Barra de São Francisco",cor:"var(--violet)"},
+  BG:{sigla:"BG",nome:"BG Autopeças · Baixo Guandu",cor:"var(--blue)"},
+};
+const STATUS = {
+  separacao:{label:"Aguardando Separação",cor:"var(--mut)"},
+  separando:{label:"Separando",cor:"var(--blue)"},
+  pronto:{label:"Pronto p/ Entrega",cor:"var(--violet)"},
+  rota:{label:"Em Rota",cor:"var(--amber)"},
+  entregue:{label:"Entregue",cor:"var(--green)"},
+  parcial:{label:"Entrega Parcial",cor:"#E8B04B"},
+  problema:{label:"Problema na Entrega",cor:"var(--red)"},
+};
+const FLOW = ["separacao","separando","pronto","rota","entregue"];
+const COURIERS = [
+  {id:"anthero",nome:"Anthero",veiculo:"Honda CG 160",placa:"PPX-1A23"},
+  {id:"jonas",nome:"Jonas",veiculo:"Yamaha Factor",placa:"QRT-2B45"},
+  {id:"joaovictor",nome:"João Victor",veiculo:"Honda Biz",placa:"MNO-3C67"},
+  {id:"farias",nome:"Farias",veiculo:"Honda CG 160",placa:"KLM-4D89"},
+];
+const PAPEIS = {
+  admin:"Administrador", gerente:"Gerente", vendedor:"Vendedor", motoboy:"Motoboy",
+};
+const NAV_BY_ROLE = {
+  admin:["painel","entregas","rotas","transferencias","ranking","semana","clientes","usuarios"],
+  gerente:["painel","entregas","rotas","transferencias","ranking","semana","clientes"],
+  vendedor:["painel","entregas","clientes"],
+  motoboy:[],
+};
+
+/* ===================== helpers ===================== */
+const brl = v => "R$ "+(Number(v)||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const nome = id => (COURIERS.find(c=>c.id===id)||{}).nome || id || "—";
+const horaAgora = () => new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+const rotulo = s => ({separacao:"Separar",separando:"Pronto",pronto:"Em rota",rota:"Entregue"}[s]||"Avançar");
+
+function metrics(dels){
+  const rota=dels.filter(d=>d.status==="rota").length;
+  const entregues=dels.filter(d=>d.status==="entregue").length;
+  const pendentes=dels.filter(d=>["separacao","separando","pronto"].includes(d.status)).length;
+  const atrasadas=dels.filter(d=>!d.noPrazo&&d.status!=="entregue").length+dels.filter(d=>d.status==="problema").length;
+  const concl=dels.filter(d=>d.status==="entregue");
+  const noPrazo=concl.filter(d=>d.noPrazo).length;
+  const sla=concl.length?Math.round(noPrazo/concl.length*100):0;
+  const km=+dels.reduce((s,d)=>s+((d.status==="entregue"||d.status==="rota")?(d.km||0):0),0).toFixed(1);
+  const faturamento=dels.reduce((s,d)=>s+(Number(d.valor)||0),0);
+  return {rota,entregues,pendentes,atrasadas,sla,tempoMedio:38,km,faturamento};
+}
+function ranking(dels){
+  return COURIERS.map(c=>{
+    const ds=dels.filter(d=>d.courier===c.id);
+    const ent=ds.filter(d=>d.status==="entregue");
+    const noPrazo=ent.filter(d=>d.noPrazo).length;
+    const atrasos=ent.filter(d=>!d.noPrazo).length;
+    const problemas=ds.filter(d=>d.status==="problema").length;
+    const pontos=ent.length*10+noPrazo*5-atrasos*5-problemas*20;
+    return {id:c.id,nome:c.nome,total:ent.length,noPrazo,atrasos,problemas,pontos};
+  }).sort((a,b)=>b.pontos-a.pontos);
+}
+
+/* --- Relatório semanal: melhor entregador da semana --- */
+// Pesos do índice composto (editáveis). "km" fica baixo de propósito:
+// mais km nem sempre é melhor (pode ser rota ineficiente).
+const PESOS_SEMANA = { entregas:0.60, saidas:0.20, km:0.20 };
+
+function inicioSemana(offset){ // offset 0 = esta semana, -1 = semana passada. Semana começa na segunda.
+  const d=new Date(); const dia=(d.getDay()+6)%7; // 0=segunda
+  d.setHours(0,0,0,0); d.setDate(d.getDate()-dia+offset*7);
+  const ini=d.getTime(); return {ini, fim:ini+7*24*3600*1000};
+}
+function noIntervalo(ts,jan){ return typeof ts==="number" && ts>=jan.ini && ts<jan.fim; }
+
+function relatorioSemana(dels, saidas, jan){
+  const linhas = COURIERS.map(c=>{
+    // entregas concluídas nesta semana (usa carimbo real; ignora as sem data)
+    const ent = dels.filter(d=>d.courier===c.id && d.status==="entregue" && noIntervalo(d.entregueEmTs, jan));
+    const entregas = ent.length;
+    const km = +ent.reduce((s,d)=>s+(d.km||0),0).toFixed(1);
+    const saidasN = saidas.filter(s=>s.courier===c.id && noIntervalo(s.ts, jan)).length;
+    return {id:c.id, nome:c.nome, entregas, km, saidas:saidasN};
+  });
+  // normaliza cada métrica pelo máximo da semana (0–100)
+  const max = {
+    entregas: Math.max(1,...linhas.map(l=>l.entregas)),
+    km:       Math.max(1,...linhas.map(l=>l.km)),
+    saidas:   Math.max(1,...linhas.map(l=>l.saidas)),
+  };
+  linhas.forEach(l=>{
+    l.nEntregas = l.entregas/max.entregas*100;
+    l.nKm       = l.km/max.km*100;
+    l.nSaidas   = l.saidas/max.saidas*100;
+    l.indice = +(l.nEntregas*PESOS_SEMANA.entregas + l.nSaidas*PESOS_SEMANA.saidas + l.nKm*PESOS_SEMANA.km).toFixed(1);
+  });
+  return linhas.sort((a,b)=>b.indice-a.indice);
+}
+
+/* --- Leitura de CSV de clientes --- */
+// Aceita separador ; ou , (Excel brasileiro usa ;), campos entre aspas e quebras CRLF.
+function parseCSV(texto){
+  texto = String(texto).replace(/^\uFEFF/, "");
+  const fim = texto.indexOf("\n");
+  const cab = fim < 0 ? texto : texto.slice(0, fim);
+  const sep = cab.split(";").length > cab.split(",").length ? ";" : ",";
+  const linhas=[]; let linha=[], cur="", aspas=false;
+  for(let i=0;i<texto.length;i++){
+    const c=texto[i];
+    if(aspas){
+      if(c === '"'){ if(texto[i+1] === '"'){ cur+='"'; i++; } else aspas=false; }
+      else cur+=c;
+    } else if(c === '"') aspas=true;
+    else if(c === sep){ linha.push(cur); cur=""; }
+    else if(c === "\n"){ linha.push(cur); cur=""; linhas.push(linha); linha=[]; }
+    else if(c !== "\r") cur+=c;
+  }
+  if(cur !== "" || linha.length){ linha.push(cur); linhas.push(linha); }
+  return linhas.filter(l => l.some(c => String(c).trim() !== ""));
+}
+
+const semAcento = s => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+
+// Nomes de coluna aceitos para cada campo (o cabeçalho do arquivo pode variar)
+const MAPA_CSV = {
+  codigo:   ["codigo","cod","codcliente","codigocliente","id","idcliente"],
+  nome:     ["nome","cliente","nomecliente","nomefantasia","fantasia","razaosocial","razao","empresa"],
+  documento:["cnpj","cpf","cpfcnpj","cnpjcpf","documento","doc"],
+  telefone: ["telefone","fone","tel","celular","whatsapp","zap","contato"],
+  endereco: ["endereco","logradouro","rua","end","enderecocompleto"],
+  bairro:   ["bairro"],
+  cidade:   ["cidade","municipio","localidade"],
+  cep:      ["cep"],
+  vendedor: ["vendedor","representante","consultor","responsavel"],
+};
+
+function lerClientesCSV(texto){
+  const linhas = parseCSV(texto);
+  if(linhas.length < 2) throw new Error("o arquivo precisa ter o cabeçalho e pelo menos uma linha de cliente.");
+  const cab = linhas[0].map(semAcento);
+  const idx = {};
+  Object.entries(MAPA_CSV).forEach(([campo, nomes]) => {
+    const i = cab.findIndex(h => nomes.includes(h));
+    if(i >= 0) idx[campo] = i;
+  });
+  if(idx.nome === undefined)
+    throw new Error('não achei a coluna do nome do cliente. O cabeçalho precisa ter uma coluna chamada "Nome", "Cliente" ou "Razão Social".');
+
+  const itens = [];
+  const ignoradas = [];
+  for(let i=1;i<linhas.length;i++){
+    const l = linhas[i];
+    const val = campo => (idx[campo] === undefined ? "" : String(l[idx[campo]] ?? "").trim());
+    const nome = val("nome");
+    if(!nome){ ignoradas.push(i+1); continue; }
+    itens.push({
+      codigo: val("codigo"), nome, documento: val("documento"), telefone: val("telefone"),
+      endereco: val("endereco"), bairro: val("bairro"), cidade: val("cidade"),
+      cep: val("cep"), vendedor: val("vendedor"),
+    });
+  }
+  const achados = Object.keys(idx);
+  const faltando = Object.keys(MAPA_CSV).filter(c => !achados.includes(c));
+  let aviso = "";
+  if(ignoradas.length) aviso = ignoradas.length + " linha(s) sem nome foram ignoradas.";
+  return { itens, aviso, achados, faltando };
+}
+
+/* ===================== UI atoms ===================== */
+const Header=({titulo,sub})=><div className="head"><h1>{titulo}</h1>{sub&&<p>{sub}</p>}</div>;
+const Badge=({cor,label})=><span className="badge" style={{color:cor,background:"color-mix(in srgb,"+cor+" 12%,transparent)",borderColor:"color-mix(in srgb,"+cor+" 40%,transparent)"}}>{label}</span>;
+function Card({titulo,sub,children}){return <div className="card"><div className="card-title">{titulo}</div>{sub&&<div className="card-sub">{sub}</div>}{children}</div>;}
+function Kpi({ico,cor,valor,label,wide,alerta}){return(
+  <div className={"kpi"+(wide?" wide":"")+(alerta?" alert":"")}>
+    <div className="kpi-ico" style={{color:cor,background:"color-mix(in srgb,"+cor+" 12%,transparent)"}}>{ico}</div>
+    <div className="kpi-val mono">{valor}</div><div className="kpi-lab">{label}</div>
+  </div>);}
+function Field({label,children,full}){return <label className={"field"+(full?" full":"")}><span>{label}</span>{children}</label>;}
+
+/* ===================== PAINEL ===================== */
+function Painel({dels,transfers}){
+  const m=useMemo(()=>metrics(dels),[dels]);
+  const transito=transfers.filter(t=>t.status==="transito").length;
+  const rk=useMemo(()=>ranking(dels).slice(0,4),[dels]);
+  const bairros=useMemo(()=>{const map={};dels.forEach(d=>map[d.bairro]=(map[d.bairro]||0)+1);
+    return Object.entries(map).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,6);},[dels]);
+  const maxB=bairros[0]?.v||1;
+  return <div>
+    <Header titulo="Painel" sub="Operação em tempo real · rede Autocani"/>
+    <div className="kpis">
+      <Kpi ico="⏱" cor="var(--amber)" valor={m.rota} label="Em rota"/>
+      <Kpi ico="📦" cor="var(--violet)" valor={m.pendentes} label="Pendentes"/>
+      <Kpi ico="✓" cor="var(--green)" valor={m.entregues} label="Entregues"/>
+      <Kpi ico="!" cor="var(--red)" valor={m.atrasadas} label="Atrasadas" alerta={m.atrasadas>0}/>
+      <Kpi ico="◔" cor="var(--blue)" valor={m.sla+"%"} label="SLA do dia"/>
+      <Kpi ico="◷" cor="var(--text)" valor={m.tempoMedio+" min"} label="Tempo médio"/>
+      <Kpi ico="⇄" cor="var(--violet)" valor={transito} label="Transf. em trânsito"/>
+      <Kpi ico="↻" cor="var(--text)" valor={m.km+" km"} label="Rodados"/>
+      <Kpi ico="R$" cor="var(--green)" valor={brl(m.faturamento)} label="Faturamento vinculado às entregas" wide/>
+    </div>
+    <div className="grid2">
+      <Card titulo="Entregas por bairro" sub="concentração da operação">
+        {bairros.length===0?<div className="empty">Sem entregas ainda.</div>:bairros.map((b,i)=>
+          <div key={b.k} className="rkrow" style={{gridTemplateColumns:"120px 1fr 40px"}}>
+            <div className="sub2" style={{fontSize:13}}>{b.k}</div>
+            <div className="rkbar"><div style={{width:(b.v/maxB*100)+"%",background:i===0?"var(--amber)":"var(--line2)"}}/></div>
+            <div className="mono rkpts">{b.v}</div>
+          </div>)}
+      </Card>
+      <Card titulo="Ranking de entregadores" sub="pontuação atual">
+        {rk.map((r,i)=><div key={r.id} className="rkrow">
+          <div className="rkpos" style={{color:i===0?"var(--amber)":"var(--mut)"}}>{i+1}º</div>
+          <div style={{fontSize:13.5,fontWeight:500}}>{r.nome}</div>
+          <div className="rkbar"><div style={{width:Math.max(4,(r.pontos/(rk[0].pontos||1))*100)+"%",background:i===0?"var(--amber)":"var(--line2)"}}/></div>
+          <div className="rkpts" style={{color:i===0?"var(--amber)":"var(--text)"}}>{r.pontos} pts</div>
+        </div>)}
+      </Card>
+    </div>
+  </div>;
+}
+
+/* ===================== ENTREGAS ===================== */
+function Entregas({dels,advance,setStatus,onNova,podeEditar}){
+  const [filtro,setFiltro]=useState("todas");
+  const [busca,setBusca]=useState("");
+  const chips=[["todas","Todas"],["separacao","Separação"],["pronto","Prontas"],["rota","Em rota"],["entregue","Entregues"],["problema","Problemas"]];
+  const lista=dels
+    .filter(d=>filtro==="todas"?true:d.status===filtro)
+    .filter(d=>busca?((d.cliente||"")+(d.pedido||"")+(d.bairro||"")).toLowerCase().includes(busca.toLowerCase()):true);
+  return <div>
+    <Header titulo="Entregas" sub={lista.length+" de "+dels.length}/>
+    <div className="toolbar">
+      <div className="search"><span style={{color:"var(--mut)"}}>⌕</span><input placeholder="Buscar cliente, pedido ou bairro" value={busca} onChange={e=>setBusca(e.target.value)}/></div>
+      {podeEditar&&<button className="newbtn" onClick={onNova}>+ Nova entrega</button>}
+      <div className="chips">{chips.map(([id,l])=><button key={id} className={"chip"+(filtro===id?" on":"")} onClick={()=>setFiltro(id)}>{l}</button>)}</div>
+    </div>
+    <div className="tablewrap">
+      <div className="trow thead"><div>Pedido</div><div>Cliente / Endereço</div><div>Loja</div><div>Entregador</div><div>Valor</div><div>Status</div><div></div></div>
+      {lista.map(d=>{const st=STATUS[d.status]||STATUS.separacao;const podeAvancar=FLOW.includes(d.status)&&d.status!=="entregue";
+        return <div key={d.id} className="trow">
+          <div className="mono" style={{color:"var(--mut)"}}>#{d.pedido}</div>
+          <div><div style={{fontWeight:600}}>{d.cliente}</div><div className="sub2">{d.end} · {d.bairro}, {d.cidade}</div></div>
+          <div><span className="store" style={{color:STORES[d.loja]?.cor,borderColor:"color-mix(in srgb,"+(STORES[d.loja]?.cor||"var(--mut)")+" 40%,transparent)"}}>{d.loja}</span></div>
+          <div>{nome(d.courier)}</div>
+          <div className="mono">{brl(d.valor)}</div>
+          <div><Badge cor={st.cor} label={st.label}/></div>
+          <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+            {podeEditar&&d.status==="rota"&&<button className="mini" style={{color:"var(--red)",borderColor:"rgba(251,100,100,.3)"}} onClick={()=>setStatus(d.id,"problema")}>Problema</button>}
+            {podeEditar&&podeAvancar&&<button className="mini on" onClick={()=>advance(d.id)}>{rotulo(d.status)} ›</button>}
+          </div>
+        </div>;})}
+      {lista.length===0&&<div className="empty">Nenhuma entrega nesse filtro.</div>}
+    </div>
+  </div>;
+}
+
+/* ===================== ROTAS ===================== */
+function Rotas({dels}){
+  const [ativo,setAtivo]=useState("anthero");
+  const stops=dels.filter(d=>d.courier===ativo&&(d.status==="rota"||d.status==="pronto"));
+  const totalKm=stops.reduce((s,d)=>s+(d.km||0),0);
+  const tempo=Math.round(totalKm*2.6+stops.length*4);
+  const co=COURIERS.find(c=>c.id===ativo);
+  return <div>
+    <Header titulo="Roteirização" sub="paradas por entregador"/>
+    <div className="rota-tabs">{COURIERS.map(c=>{const n=dels.filter(d=>d.courier===c.id&&(d.status==="rota"||d.status==="pronto")).length;
+      return <button key={c.id} className={"rota-tab"+(ativo===c.id?" on":"")} onClick={()=>setAtivo(c.id)}>🏍 {c.nome} <span className="rota-n">{n}</span></button>;})}</div>
+    <div className="grid-rota">
+      <Card titulo={"Rota de "+co.nome} sub={co.veiculo+" · "+co.placa}>
+        {stops.length===0?<div className="empty">Sem paradas. Promova entregas para "Em rota".</div>:<div>
+          {stops.map((d,i)=><div key={d.id} className="stop">
+            <div className="stop-rail"><div className="stop-dot">{i+1}</div>{i<stops.length-1&&<div className="stop-line"/>}</div>
+            <div className="stop-body"><div className="stop-top"><strong>{d.cliente}</strong><span className="mono sub2">{d.km} km</span></div>
+            <div className="sub2">{d.end} · {d.bairro}, {d.cidade}</div></div>
+          </div>)}
+          <a className="cta" target="_blank" rel="noreferrer" href={"https://www.google.com/maps/dir/"+stops.map(s=>encodeURIComponent(s.end+", "+s.cidade)).join("/")}>➤ Iniciar navegação no Google Maps</a>
+        </div>}
+      </Card>
+      <div className="rota-side">
+        <Card titulo="Resumo da rota">
+          <div className="resumo-l"><span>Paradas</span><b className="mono">{stops.length}</b></div>
+          <div className="resumo-l"><span>Distância total</span><b className="mono">{totalKm.toFixed(1)} km</b></div>
+          <div className="resumo-l"><span>Tempo estimado</span><b className="mono">{tempo} min</b></div>
+          <div className="resumo-l"><span>Custo · R$ 1,35/km</span><b className="mono">{brl(totalKm*1.35)}</b></div>
+        </Card>
+      </div>
+    </div>
+  </div>;
+}
+
+/* ===================== TRANSFERÊNCIAS ===================== */
+function Transferencias({transfers,advanceTransfer,podeEditar}){
+  const stT={separando:{label:"Separando",cor:"var(--blue)"},transito:{label:"Em trânsito",cor:"var(--amber)"},recebida:{label:"Recebida",cor:"var(--green)"}};
+  return <div>
+    <Header titulo="Transferências entre lojas" sub="COL ↔ BG ↔ BSF"/>
+    {transfers.length===0?<div className="empty">Nenhuma transferência registrada.</div>:
+    <div className="tf-list">{transfers.map(t=>{const s=stT[t.status]||stT.separando;const qtd=(t.itens||[]).reduce((a,i)=>a+i.qtd,0);
+      return <div key={t.id} className="tf">
+        <div className="tf-head"><div className="tf-rota">
+          <span className="store" style={{color:STORES[t.origem]?.cor}}>{t.origem}</span>⇄<span className="store" style={{color:STORES[t.destino]?.cor}}>{t.destino}</span>
+        </div><Badge cor={s.cor} label={s.label}/></div>
+        <div className="tf-meta"><span>🏍 {nome(t.courier)}</span><span>▣ {(t.itens||[]).length} itens · {qtd} un</span></div>
+        {(t.itens||[]).map((i,k)=><div key={k} className="tf-item"><span className="mono" style={{color:"var(--mut)"}}>{i.cod}</span><span style={{flex:1}}>{i.desc}</span><span className="mono">{i.qtd}x</span></div>)}
+        {podeEditar&&t.status==="transito"&&<button className="tf-receber" onClick={()=>advanceTransfer(t.id)}>✓ Confirmar recebimento em {STORES[t.destino]?.sigla}</button>}
+      </div>;})}</div>}
+  </div>;
+}
+
+/* ===================== RANKING ===================== */
+function Ranking({dels}){
+  const rk=ranking(dels);const max=rk[0]?.pontos||1;
+  const Stat=({label,v,cor})=><div className="stat"><b className="mono" style={{color:cor}}>{v}</b><span>{label}</span></div>;
+  return <div>
+    <Header titulo="Ranking de entregadores" sub="entrega +10 · no prazo +5 · antecipada +2 · atraso −5 · reclamação −20"/>
+    {rk.map((r,i)=><div key={r.id} className={"rkcard"+(i===0?" lead":"")}>
+      <div className="rkbig" style={{color:i===0?"var(--amber)":"var(--mut2)"}}>{i+1}</div>
+      <div style={{flex:1}}>
+        <div className="rkhead"><strong style={{fontSize:15}}>{r.nome}</strong><span className="mono" style={{fontSize:16,fontWeight:700,color:i===0?"var(--amber)":"var(--text)"}}>{r.pontos} pts</span></div>
+        <div className="rkbar full"><div style={{width:Math.max(6,r.pontos/max*100)+"%",background:i===0?"var(--amber)":"var(--line2)"}}/></div>
+        <div className="rkstats"><Stat label="Entregas" v={r.total}/><Stat label="No prazo" v={r.noPrazo} cor="var(--green)"/><Stat label="Atrasos" v={r.atrasos} cor={r.atrasos?"var(--red)":"var(--mut)"}/><Stat label="Problemas" v={r.problemas} cor={r.problemas?"var(--red)":"var(--mut)"}/></div>
+      </div>
+    </div>)}
+  </div>;
+}
+
+/* ===================== RELATÓRIO DA SEMANA ===================== */
+function SemanaReport({dels,saidas}){
+  const [offset,setOffset]=useState(0);
+  const jan=useMemo(()=>inicioSemana(offset),[offset]);
+  const linhas=useMemo(()=>relatorioSemana(dels,saidas,jan),[dels,saidas,jan]);
+  const temDados=linhas.some(l=>l.entregas||l.saidas||l.km);
+  const vencedor=temDados?linhas[0]:null;
+  const fmtData=ts=>new Date(ts).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});
+  const periodo=fmtData(jan.ini)+" a "+fmtData(jan.fim-1);
+  return <div>
+    <Header titulo="Melhor entregador da semana" sub={"período "+periodo+" · índice = entregas 60% · saídas 20% · km 20% (normalizados)"}/>
+
+    <div className="rota-tabs">
+      <button className={"rota-tab"+(offset===0?" on":"")} onClick={()=>setOffset(0)}>Esta semana</button>
+      <button className={"rota-tab"+(offset===-1?" on":"")} onClick={()=>setOffset(-1)}>Semana passada</button>
+    </div>
+
+    {!temDados ? <div className="empty">Sem dados nesta semana. As entregas contam quando marcadas como "Entregue", e as saídas quando o motoboy registra "Saí da loja".</div> : <>
+      <div className="card" style={{marginBottom:14,display:"flex",alignItems:"center",gap:16,borderColor:"rgba(244,167,36,.4)",background:"linear-gradient(90deg,rgba(244,167,36,.08),var(--panel) 55%)"}}>
+        <div style={{fontSize:34}}>🏆</div>
+        <div style={{flex:1}}>
+          <div className="sub2" style={{textTransform:"uppercase",letterSpacing:1,fontSize:10.5,color:"var(--amber)",fontWeight:700}}>Melhor da semana</div>
+          <div style={{fontSize:22,fontWeight:700}}>{vencedor.nome}</div>
+          <div className="sub2">{vencedor.entregas} entregas · {vencedor.saidas} saídas · {vencedor.km} km · índice {vencedor.indice}</div>
+        </div>
+      </div>
+
+      <div className="tablewrap">
+        <div className="trow thead" style={{gridTemplateColumns:"40px 1fr 90px 90px 90px 90px"}}>
+          <div>#</div><div>Entregador</div><div>Entregas</div><div>Saídas</div><div>Km</div><div>Índice</div>
+        </div>
+        {linhas.map((l,i)=><div key={l.id} className="trow" style={{gridTemplateColumns:"40px 1fr 90px 90px 90px 90px"}}>
+          <div className="rkpos" style={{color:i===0?"var(--amber)":"var(--mut)"}}>{i+1}º</div>
+          <div style={{fontWeight:600}}>{l.nome}</div>
+          <div className="mono">{l.entregas}</div>
+          <div className="mono">{l.saidas}</div>
+          <div className="mono">{l.km}</div>
+          <div className="mono" style={{fontWeight:700,color:i===0?"var(--amber)":"var(--text)"}}>{l.indice}</div>
+        </div>)}
+      </div>
+
+      <div className="sub2" style={{marginTop:12,lineHeight:1.6}}>
+        O <b>índice</b> normaliza cada coluna pelo melhor da semana (0–100) e aplica os pesos, pra somar métricas de escalas diferentes sem o km dominar. Km bruto entra com peso baixo porque rodar mais não é necessariamente melhor.
+      </div>
+    </>}
+  </div>;
+}
+
+/* ===================== CLIENTES ===================== */
+function Clientes({dels, clientes, podeEditar, onImportar}){
+  const [show,setShow]=useState(false);
+  const [busca,setBusca]=useState("");
+
+  // estatísticas de entrega por nome de cliente
+  const stats=useMemo(()=>{const m={};
+    dels.forEach(d=>{const k=(d.cliente||"").trim().toLowerCase();if(!k)return;
+      if(!m[k])m[k]={total:0,entregas:0,bairro:d.bairro,cidade:d.cidade};
+      m[k].total+=Number(d.valor)||0; m[k].entregas++;});
+    return m;},[dels]);
+
+  const lista=useMemo(()=>{
+    if(clientes.length){
+      // base importada, enriquecida com o que veio das entregas
+      return clientes.map(c=>{
+        const s=stats[(c.nome||"").trim().toLowerCase()]||{total:0,entregas:0};
+        const total=s.total, entregas=s.entregas;
+        return {...c, total, entregas, ticket:entregas?total/entregas:0,
+          tier: total>1200?"Ouro":total>400?"Prata":"Bronze", importado:true};
+      }).sort((a,b)=>b.total-a.total || a.nome.localeCompare(b.nome));
+    }
+    // sem importação: deriva das entregas (comportamento anterior)
+    return Object.entries(stats).map(([,s],i)=>s).map(()=>null).filter(Boolean).length ? [] :
+      Object.keys(stats).map(k=>{const s=stats[k];
+        const nome=(dels.find(d=>(d.cliente||"").trim().toLowerCase()===k)||{}).cliente||k;
+        return {nome,bairro:s.bairro,cidade:s.cidade,total:s.total,entregas:s.entregas,
+          ticket:s.entregas?s.total/s.entregas:0,
+          tier:s.total>1200?"Ouro":s.total>400?"Prata":"Bronze",importado:false};
+      }).sort((a,b)=>b.total-a.total);
+  },[clientes,stats,dels]);
+
+  const filtrada=busca
+    ? lista.filter(c=>((c.nome||"")+(c.bairro||"")+(c.cidade||"")+(c.codigo||"")).toLowerCase().includes(busca.toLowerCase()))
+    : lista;
+
+  const tc={Ouro:"var(--amber)",Prata:"#C7CCD6",Bronze:"#C08457"};
+  return <div>
+    <Header titulo="Clientes" sub={clientes.length
+      ? clientes.length+" cadastrados · "+filtrada.length+" exibidos"
+      : lista.length+" com movimento (derivados das entregas)"}/>
+
+    <div className="toolbar">
+      <div className="search"><span style={{color:"var(--mut)"}}>⌕</span>
+        <input placeholder="Buscar por nome, código ou bairro" value={busca} onChange={e=>setBusca(e.target.value)}/></div>
+      {podeEditar&&<button className="newbtn" onClick={()=>setShow(true)}>⭳ Importar CSV</button>}
+    </div>
+
+    <div className="tablewrap">
+      <div className="trow cli thead"><div>Cliente</div><div>Região</div><div>Classe</div><div>Faturamento</div><div>Ticket médio</div><div>Entregas</div></div>
+      {filtrada.map((c,i)=><div key={(c.codigo||"")+c.nome+i} className="trow cli">
+        <div>
+          <div style={{fontWeight:600}}>{c.nome}</div>
+          {(c.codigo||c.telefone)&&<div className="sub2">{c.codigo?"#"+c.codigo:""}{c.codigo&&c.telefone?" · ":""}{c.telefone||""}</div>}
+        </div>
+        <div className="sub2">{[c.bairro,c.cidade].filter(Boolean).join(", ")||"—"}</div>
+        <div><span className="tier" style={{color:tc[c.tier],borderColor:"color-mix(in srgb,"+tc[c.tier]+" 40%,transparent)"}}>{c.tier}</span></div>
+        <div className="mono">{brl(c.total)}</div>
+        <div className="mono sub2">{brl(c.ticket)}</div>
+        <div className="mono">{c.entregas}</div>
+      </div>)}
+      {filtrada.length===0&&<div className="empty">
+        {clientes.length?"Nenhum cliente encontrado nessa busca.":"Nenhum cliente ainda. Importe sua base por CSV para começar."}
+      </div>}
+    </div>
+
+    {show&&<ImportarClientes onClose={()=>setShow(false)} onImportar={onImportar}/>}
+  </div>;
+}
+
+/* ===================== IMPORTAR CLIENTES (CSV) ===================== */
+function ImportarClientes({onClose,onImportar}){
+  const [itens,setItens]=useState(null);
+  const [info,setInfo]=useState(null);
+  const [erro,setErro]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [prog,setProg]=useState(0);
+  const [texto,setTexto]=useState("");
+
+  const processar=t=>{
+    try{
+      const r=lerClientesCSV(t);
+      if(!r.itens.length){setErro("Não encontrei nenhum cliente válido no arquivo.");setItens(null);return;}
+      setErro(""); setItens(r.itens); setInfo(r);
+    }catch(e){ setErro(e.message||String(e)); setItens(null); }
+  };
+
+  const arquivo=e=>{
+    const f=e.target.files&&e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{
+      const t=String(r.result);
+      // Excel brasileiro costuma salvar em Latin-1; se vier caractere quebrado, relê
+      if(t.includes("\uFFFD")){
+        const r2=new FileReader();
+        r2.onload=()=>processar(String(r2.result));
+        r2.readAsText(f,"ISO-8859-1");
+      } else processar(t);
+    };
+    r.onerror=()=>setErro("Falha ao ler o arquivo.");
+    r.readAsText(f,"UTF-8");
+  };
+
+  const importar=async()=>{
+    setBusy(true); setProg(0);
+    try{ await onImportar(itens, n=>setProg(n)); onClose(); }
+    catch(e){ setErro("Erro ao gravar: "+e.message); setBusy(false); }
+  };
+
+  const NOMES={codigo:"Código",nome:"Nome",documento:"CNPJ/CPF",telefone:"Telefone",
+    endereco:"Endereço",bairro:"Bairro",cidade:"Cidade",cep:"CEP",vendedor:"Vendedor"};
+
+  return <div className="modal-bg" onClick={busy?null:onClose}>
+    <div className="modal" style={{maxWidth:620}} onClick={e=>e.stopPropagation()}>
+      <div className="modal-head">
+        <div><div className="modal-title">Importar clientes por CSV</div>
+        <div className="sub2">aceita separador ; ou , · a 1ª linha deve ser o cabeçalho</div></div>
+        {!busy&&<button className="modal-x" onClick={onClose}>×</button>}
+      </div>
+
+      <div style={{padding:"18px 20px"}}>
+        {erro&&<div className="gate-err" style={{marginBottom:14}}>{erro}</div>}
+
+        {!itens&&<>
+          <label className="csv-drop">
+            <input type="file" accept=".csv,.txt,text/csv" onChange={arquivo} style={{display:"none"}}/>
+            <div style={{fontSize:26,marginBottom:8}}>⭳</div>
+            <b>Escolher arquivo CSV</b>
+            <div className="sub2" style={{marginTop:4}}>ou arraste o arquivo exportado do Easycontrol</div>
+          </label>
+
+          <div className="sub2" style={{margin:"16px 0 6px"}}>Ou cole o conteúdo aqui:</div>
+          <textarea className="csv-ta" value={texto} onChange={e=>setTexto(e.target.value)}
+            placeholder={"Codigo;Nome;Telefone;Endereco;Bairro;Cidade\n1001;Oficina do Téo;27999990000;Av. Brasil, 1180;Maria Ortiz;Colatina"}/>
+          <button className="btn-ghost" style={{marginTop:8}} disabled={!texto.trim()} onClick={()=>processar(texto)}>Ler texto colado</button>
+
+          <div className="sub2" style={{marginTop:16,lineHeight:1.6}}>
+            <b style={{color:"var(--text)"}}>Colunas reconhecidas:</b> Código, Nome (obrigatória), CNPJ/CPF,
+            Telefone, Endereço, Bairro, Cidade, CEP, Vendedor. Colunas com outros nomes são ignoradas — nada quebra.
+          </div>
+        </>}
+
+        {itens&&<>
+          <div className="csv-resumo">
+            <div><b className="mono">{itens.length}</b><span>clientes lidos</span></div>
+            <div><b className="mono">{info.achados.length}</b><span>colunas reconhecidas</span></div>
+          </div>
+
+          {info.faltando.length>0&&<div className="sub2" style={{marginBottom:10}}>
+            Não vieram no arquivo: {info.faltando.map(f=>NOMES[f]).join(", ")}. Tudo bem — ficam em branco.
+          </div>}
+          {info.aviso&&<div className="sub2" style={{marginBottom:10,color:"#E8B04B"}}>{info.aviso}</div>}
+
+          <div className="sub2" style={{marginBottom:6}}>Confira as 5 primeiras linhas antes de gravar:</div>
+          <div className="csv-prev">
+            {itens.slice(0,5).map((c,i)=><div key={i} className="csv-prev-l">
+              <span className="mono" style={{color:"var(--mut)",minWidth:60}}>{c.codigo||"—"}</span>
+              <span style={{flex:1,fontWeight:600}}>{c.nome}</span>
+              <span className="sub2">{[c.bairro,c.cidade].filter(Boolean).join(", ")||"—"}</span>
+            </div>)}
+          </div>
+
+          {busy&&<div style={{marginTop:14}}>
+            <div className="rkbar" style={{height:8}}><div style={{width:(prog/itens.length*100)+"%",background:"var(--amber)"}}/></div>
+            <div className="sub2" style={{marginTop:6}}>Gravando {prog} de {itens.length}…</div>
+          </div>}
+        </>}
+      </div>
+
+      <div className="modal-foot">
+        {itens&&!busy&&<button className="btn-ghost" onClick={()=>{setItens(null);setErro("");}}>Trocar arquivo</button>}
+        {!busy&&<button className="btn-ghost" onClick={onClose}>Cancelar</button>}
+        {itens&&<button className="btn-amber" disabled={busy} onClick={importar}>
+          {busy?"Importando…":"Importar "+itens.length+" clientes"}</button>}
+      </div>
+    </div>
+  </div>;
+}
+
+/* ===================== USUÁRIOS (admin) ===================== */
+function Usuarios({users}){
+  const [show,setShow]=useState(false);
+  const papelCor={admin:"var(--amber)",gerente:"var(--blue)",vendedor:"var(--violet)",motoboy:"var(--green)"};
+  const toggle=async u=>{try{await db.collection("users").doc(u.uid).update({ativo:!u.ativo});}catch(e){alert("Erro: "+e.message);}};
+  return <div>
+    <Header titulo="Usuários" sub="quem tem acesso ao sistema"/>
+    <div className="toolbar"><button className="newbtn" onClick={()=>setShow(true)}>+ Novo usuário</button></div>
+    <div className="tablewrap">
+      <div className="trow usr thead"><div>Nome</div><div>E-mail</div><div>Papel</div><div>Status</div><div></div></div>
+      {users.map(u=><div key={u.uid} className="trow usr">
+        <div style={{fontWeight:600}}>{u.nome}{u.papel==="motoboy"&&u.motoboyId?" · "+nome(u.motoboyId):""}</div>
+        <div className="sub2">{u.email}</div>
+        <div><span className="badge" style={{color:papelCor[u.papel],borderColor:"color-mix(in srgb,"+papelCor[u.papel]+" 40%,transparent)",background:"color-mix(in srgb,"+papelCor[u.papel]+" 12%,transparent)"}}>{PAPEIS[u.papel]}</span></div>
+        <div style={{color:u.ativo?"var(--green)":"var(--mut2)",fontSize:12.5,display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:99,background:u.ativo?"var(--green)":"var(--mut2)"}}/>{u.ativo?"Ativo":"Desativado"}</div>
+        <div style={{textAlign:"right"}}><button className="mini" onClick={()=>toggle(u)}>{u.ativo?"Desativar":"Reativar"}</button></div>
+      </div>)}
+      {users.length===0&&<div className="empty">Nenhum usuário cadastrado ainda.</div>}
+    </div>
+    {show&&<NovoUsuario onClose={()=>setShow(false)}/>}
+  </div>;
+}
+function NovoUsuario({onClose}){
+  const [f,setF]=useState({nome:"",email:"",senha:"",papel:"vendedor",motoboyId:"anthero"});
+  const [erro,setErro]=useState("");const [busy,setBusy]=useState(false);
+  const set=k=>e=>setF(p=>({...p,[k]:e.target.value}));
+  const valido=f.nome.trim()&&f.email.trim()&&f.senha.length>=6;
+  const salvar=async()=>{
+    if(!valido)return;setBusy(true);setErro("");
+    // instância secundária: cria o usuário sem deslogar o admin atual
+    let sec;
+    try{
+      sec=firebase.apps.find(a=>a.name==="sec")||firebase.initializeApp(CFG,"sec");
+      const cred=await sec.auth().createUserWithEmailAndPassword(f.email.trim(),f.senha);
+      await db.collection("users").doc(cred.user.uid).set({
+        nome:f.nome.trim(),email:f.email.trim(),papel:f.papel,
+        motoboyId:f.papel==="motoboy"?f.motoboyId:null,ativo:true,criadoEm:Date.now()
+      });
+      await sec.auth().signOut();
+      onClose();
+    }catch(e){
+      const map={"auth/email-already-in-use":"Este e-mail já está cadastrado.","auth/invalid-email":"E-mail inválido.","auth/weak-password":"Senha muito fraca (mín. 6 caracteres)."};
+      setErro(map[e.code]||e.message);
+    }finally{setBusy(false);}
+  };
+  return <div className="modal-bg" onClick={onClose}><div className="modal" onClick={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><div className="modal-title">Novo usuário</div><div className="sub2">login por e-mail e senha</div></div><button className="modal-x" onClick={onClose}>×</button></div>
+    <div style={{padding:"0 20px"}}>{erro&&<div className="gate-err" style={{marginTop:16}}>{erro}</div>}</div>
+    <div className="form">
+      <Field label="Nome" full><input value={f.nome} onChange={set("nome")} placeholder="Nome completo" autoFocus/></Field>
+      <Field label="E-mail" full><input value={f.email} onChange={set("email")} placeholder="email@exemplo.com" inputMode="email"/></Field>
+      <Field label="Senha (mín. 6)" full><input value={f.senha} onChange={set("senha")} type="password" placeholder="••••••"/></Field>
+      <Field label="Papel"><select value={f.papel} onChange={set("papel")}>{Object.entries(PAPEIS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>
+      {f.papel==="motoboy"&&<Field label="Vincular a"><select value={f.motoboyId} onChange={set("motoboyId")}>{COURIERS.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></Field>}
+    </div>
+    <div className="modal-foot"><button className="btn-ghost" onClick={onClose}>Cancelar</button><button className="btn-amber" disabled={!valido||busy} onClick={salvar}>{busy?"Criando…":"Criar usuário"}</button></div>
+  </div></div>;
+}
+
+/* ===================== NOVA ENTREGA ===================== */
+function NovaEntrega({dels,onClose,onSave}){
+  const nums=dels.map(d=>+d.pedido).filter(n=>!isNaN(n));
+  const nextNum=String((nums.length?Math.max(...nums):1041)+1);
+  const [f,setF]=useState({pedido:nextNum,cliente:"",end:"",bairro:"",cidade:"Colatina",loja:"COL",courier:"anthero",valor:""});
+  const set=k=>e=>setF(p=>({...p,[k]:e.target.value}));
+  const valido=f.cliente.trim()&&f.end.trim()&&f.bairro.trim();
+  const salvar=()=>{if(!valido)return;onSave({...f,valor:parseFloat(String(f.valor).replace(",","."))||0});};
+  return <div className="modal-bg" onClick={onClose}><div className="modal" onClick={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><div className="modal-title">Nova entrega</div><div className="sub2">pedido #{f.pedido} · entra como "Aguardando separação"</div></div><button className="modal-x" onClick={onClose}>×</button></div>
+    <div className="form">
+      <Field label="Cliente" full><input value={f.cliente} onChange={set("cliente")} placeholder="Ex.: Oficina do Téo" autoFocus/></Field>
+      <Field label="Endereço" full><input value={f.end} onChange={set("end")} placeholder="Rua, número"/></Field>
+      <Field label="Bairro"><input value={f.bairro} onChange={set("bairro")} placeholder="Bairro"/></Field>
+      <Field label="Cidade"><select value={f.cidade} onChange={set("cidade")}>{["Colatina","Baixo Guandu","Barra de São Francisco","Marilândia","Pancas"].map(c=><option key={c}>{c}</option>)}</select></Field>
+      <Field label="Loja de origem"><select value={f.loja} onChange={set("loja")}>{Object.entries(STORES).map(([k,v])=><option key={k} value={k}>{v.nome}</option>)}</select></Field>
+      <Field label="Entregador"><select value={f.courier} onChange={set("courier")}>{COURIERS.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></Field>
+      <Field label="Valor (R$)" full><input value={f.valor} onChange={set("valor")} placeholder="0,00" inputMode="decimal"/></Field>
+    </div>
+    <div className="modal-foot"><button className="btn-ghost" onClick={onClose}>Cancelar</button><button className="btn-amber" disabled={!valido} onClick={salvar}>Cadastrar entrega</button></div>
+  </div></div>;
+}
+
+/* ===================== MOTORISTA ===================== */
+function Motorista({dels,courier,setStatus,onSaida}){
+  const co=COURIERS.find(c=>c.id===courier)||{nome:"Entregador",veiculo:"",placa:""};
+  const minhas=dels.filter(d=>d.courier===courier);
+  const proxima=minhas.find(d=>d.status==="rota")||minhas.find(d=>d.status==="pronto");
+  const feitas=minhas.filter(d=>d.status==="entregue").length;
+  const pend=minhas.filter(d=>d.status!=="entregue"&&d.status!=="problema").length;
+  return <div className="driver">
+    <div className="driver-head"><div className="logo">🏍</div><div><div style={{fontWeight:700}}>{co.nome}</div><div className="sub2">{co.veiculo} · {co.placa}</div></div>
+      <div className="driver-stats"><div><b style={{color:"var(--green)"}}>{feitas}</b><span>feitas</span></div><div><b style={{color:"var(--amber)"}}>{pend}</b><span>pendentes</span></div></div></div>
+    {onSaida&&<button className="tf-receber" style={{marginBottom:16,marginTop:0}} onClick={()=>{onSaida(courier);alert("Saída registrada. Bom trabalho!");}}>🏍 Registrar saída da loja</button>}
+    {proxima?<div className="next">
+      <div className="next-tag">Próxima entrega</div>
+      <div className="next-cli">{proxima.cliente}</div>
+      <div className="sub2" style={{marginBottom:4}}>{proxima.end} · {proxima.bairro}, {proxima.cidade}</div>
+      <div className="next-actions">
+        <a className="act" href="tel:+5527999999999">📞<span>Ligar</span></a>
+        <a className="act" target="_blank" rel="noreferrer" href="https://wa.me/5527999999999">💬<span>WhatsApp</span></a>
+        <a className="act" target="_blank" rel="noreferrer" href={"https://www.google.com/maps/search/"+encodeURIComponent(proxima.end+", "+proxima.cidade)}>📍<span>Mapa</span></a>
+        <button className="act" onClick={()=>alert("Foto da mercadoria/NF (fase de comprovante).")}>📷<span>Foto</span></button>
+      </div>
+      <button className="confirm" onClick={()=>setStatus(proxima.id,"entregue")}>✓ Confirmar entrega</button>
+    </div>:<div className="next" style={{textAlign:"center",color:"var(--mut)"}}>Tudo entregue por aqui. 🏁</div>}
+    <div className="label">Minhas entregas</div>
+    {minhas.map(d=>{const st=STATUS[d.status]||STATUS.separacao;return <div key={d.id} className="dcard">
+      <div style={{flex:1}}><div style={{fontWeight:600}}>{d.cliente}</div><div className="sub2">{d.bairro}, {d.cidade} · #{d.pedido}</div></div><Badge cor={st.cor} label={st.label}/></div>;})}
+    {minhas.length===0&&<div className="empty">Nenhuma entrega atribuída.</div>}
+  </div>;
+}
+
+/* ===================== APP (autenticado) ===================== */
+function App({perfil}){
+  const [dels,setDels]=useState([]);
+  const [transfers,setTransfers]=useState([]);
+  const [users,setUsers]=useState([]);
+  const [saidas,setSaidas]=useState([]);
+  const [clientes,setClientes]=useState([]);
+  const [view,setView]=useState("painel");
+  const [modo,setModo]=useState("central"); // central | motorista
+  const [mbSel,setMbSel]=useState("anthero"); // qual motoboy a central está visualizando
+  const [showNova,setShowNova]=useState(false);
+
+  const isMotoboy=perfil.papel==="motoboy";
+  const podeEditar=["admin","gerente","vendedor"].includes(perfil.papel);
+  const navItens=NAV_BY_ROLE[perfil.papel]||[];
+
+  useEffect(()=>{
+    const u1=db.collection("entregas").onSnapshot(s=>setDels(s.docs.map(d=>({id:d.id,...d.data()}))),e=>console.warn(e));
+    const u2=db.collection("transferencias").onSnapshot(s=>setTransfers(s.docs.map(d=>({id:d.id,...d.data()}))),e=>console.warn(e));
+    const u4=db.collection("saidas").onSnapshot(s=>setSaidas(s.docs.map(d=>({id:d.id,...d.data()}))),e=>console.warn(e));
+    const u5=db.collection("clientes").onSnapshot(s=>setClientes(s.docs.map(d=>({id:d.id,...d.data()}))),e=>console.warn(e));
+    let u3=()=>{};
+    if(perfil.papel==="admin") u3=db.collection("users").onSnapshot(s=>setUsers(s.docs.map(d=>({uid:d.id,...d.data()}))),e=>console.warn(e));
+    return ()=>{u1();u2();u3();u4();u5();};
+  },[]);
+
+  const addDelivery=async novo=>{
+    try{await db.collection("entregas").add({
+      pedido:novo.pedido,cliente:novo.cliente,end:novo.end,bairro:novo.bairro,cidade:novo.cidade,
+      loja:novo.loja,courier:novo.courier,valor:novo.valor,status:"separacao",
+      noPrazo:true,km:+(2+Math.random()*8).toFixed(1),entregueEm:null,criadoEm:Date.now()
+    });setShowNova(false);}catch(e){alert("Erro ao salvar: "+e.message);}
+  };
+  const advance=async id=>{const d=dels.find(x=>x.id===id);if(!d)return;const i=FLOW.indexOf(d.status);if(i<0||i>=FLOW.length-1)return;
+    const next=FLOW[i+1];const upd={status:next};if(next==="entregue"){upd.entregueEm=horaAgora();upd.entregueEmTs=Date.now();}
+    try{await db.collection("entregas").doc(id).update(upd);}catch(e){alert(e.message);}};
+  const setStatus=async(id,status)=>{const upd={status,entregueEm:status==="entregue"?horaAgora():null};if(status==="entregue")upd.entregueEmTs=Date.now();
+    try{await db.collection("entregas").doc(id).update(upd);}catch(e){alert(e.message);}};
+  const advanceTransfer=async id=>{try{await db.collection("transferencias").doc(id).update({status:"recebida"});}catch(e){alert(e.message);}};
+  const registrarSaida=async courier=>{try{await db.collection("saidas").add({courier,ts:Date.now()});}catch(e){alert(e.message);}};
+  const importarClientes=async(itens,onProg)=>{
+    const CH=400; // Firestore aceita até 500 operações por lote
+    for(let i=0;i<itens.length;i+=CH){
+      const lote=db.batch();
+      itens.slice(i,i+CH).forEach(c=>{
+        const cod=String(c.codigo||"").replace(/[^a-zA-Z0-9_-]/g,"");
+        const ref=cod?db.collection("clientes").doc("c"+cod):db.collection("clientes").doc();
+        lote.set(ref,{...c,atualizadoEm:Date.now()},{merge:true});
+      });
+      await lote.commit();
+      if(onProg) onProg(Math.min(i+CH,itens.length));
+    }
+  };
+
+  const seedDemo=async()=>{
+    if(!confirm("Isso grava alguns registros de exemplo no seu banco. Continuar?"))return;
+    const ex=[
+      ["1042","Oficina do Téo","Av. Brasil, 1180","Maria Ortiz","Colatina","COL","anthero","rota",248.9,true],
+      ["1045","Mecânica Diesel ES","Rod. ES-080, km 4","São Silvano","Colatina","COL","jonas","rota",1340,false],
+      ["1046","Oficina Honório","R. Pernambuco, 410","Honório Fraga","Colatina","COL","jonas","entregue",318.2,true],
+      ["1048","Auto Elétrica Sol","R. Dom Pedro II, 58","Sol Nascente","Colatina","COL","joaovictor","entregue",142,true],
+      ["1052","Auto Peças Francisco","R. Wilson Bahiense, 21","Centro","Barra de São Francisco","BSF","farias","pronto",1120,true],
+    ];
+    const diaMs=24*3600*1000;
+    for(const r of ex){const[pedido,cliente,end,bairro,cidade,loja,courier,status,valor,noPrazo]=r;
+      const ent=status==="entregue";
+      await db.collection("entregas").add({pedido,cliente,end,bairro,cidade,loja,courier,status,valor,noPrazo,
+        km:+(2+Math.random()*8).toFixed(1),entregueEm:ent?"11:42":null,
+        entregueEmTs:ent?(Date.now()-diaMs):null,criadoEm:Date.now()});}
+    await db.collection("transferencias").add({origem:"COL",destino:"BG",courier:"farias",status:"transito",itens:[{cod:"NK-4512",desc:"Pastilha de freio diant. (Nakata)",qtd:6},{cod:"SA-2210",desc:"Amortecedor traseiro (Sachs)",qtd:2}]});
+    // saídas de exemplo desta semana (números distintos por motoboy)
+    const saidasEx=[["anthero",3],["jonas",2],["joaovictor",2],["farias",1]];
+    for(const [courier,n] of saidasEx){for(let k=0;k<n;k++){await db.collection("saidas").add({courier,ts:Date.now()-(k*diaMs)});}}
+  };
+
+  const NAV_LABELS={painel:"Painel",entregas:"Entregas",rotas:"Rotas",transferencias:"Transferências",ranking:"Ranking",semana:"Melhor da semana",clientes:"Clientes",usuarios:"Usuários"};
+
+  return <div className="shell">
+    <aside className="rail">
+      <div className="brand"><div className="logo">A</div><div><div className="brand-name">AutoRota<span style={{color:"var(--amber)"}}> Pro</span></div><div className="brand-sub">rede autocani</div></div></div>
+
+      {(perfil.papel==="admin"||perfil.papel==="gerente")&&<div className="seg">
+        <button className={modo==="central"?"on":""} onClick={()=>setModo("central")}>Central</button>
+        <button className={modo==="motorista"?"on":""} onClick={()=>setModo("motorista")}>Motorista</button>
+      </div>}
+
+      {!isMotoboy&&modo==="central"&&<nav className="nav">
+        {navItens.map(id=><button key={id} className={"navbtn"+(view===id?" on":"")} onClick={()=>setView(id)}>{NAV_LABELS[id]}</button>)}
+      </nav>}
+
+      {(isMotoboy||modo==="motorista")&&(perfil.papel==="admin"||perfil.papel==="gerente")&&<div className="nav">
+        <div className="label" style={{margin:"4px 0"}}>Ver como</div>
+        {COURIERS.map(c=><button key={c.id} className={"navbtn"+(mbSel===c.id?" on":"")} onClick={()=>setMbSel(c.id)}>🏍 {c.nome}</button>)}
+      </div>}
+
+      <div className="rail-foot">
+        <div className="who"><b>{perfil.nome}</b>{PAPEIS[perfil.papel]}</div>
+        <button className="signout" onClick={()=>auth.signOut()}>Sair</button>
+        <div className="live"><span className="dot"/> tempo real</div>
+      </div>
+    </aside>
+
+    <main className="main">
+      {isMotoboy ? (
+        perfil.motoboyId
+          ? <Motorista dels={dels} courier={perfil.motoboyId} setStatus={setStatus} onSaida={registrarSaida}/>
+          : <div className="empty" style={{maxWidth:420,margin:"40px auto",border:"1px solid var(--line)",borderRadius:14,background:"var(--panel)"}}>
+              <div style={{fontSize:30,marginBottom:10}}>⚠️</div>
+              <b style={{color:"var(--text)",display:"block",marginBottom:6}}>Conta não vinculada</b>
+              Seu usuário é de motoboy, mas não foi vinculado a nenhum entregador.<br/>
+              Peça a um administrador para editar seu cadastro na aba <b>Usuários</b>.
+            </div>
+      ) : modo==="motorista" ? (
+        <Motorista dels={dels} courier={mbSel} setStatus={setStatus} onSaida={registrarSaida}/>
+      ) : (<>
+        {view==="painel"&&<>{dels.length===0&&perfil.papel==="admin"&&<div style={{marginBottom:14}}><button className="newbtn" onClick={seedDemo}>Popular com dados de exemplo</button></div>}<Painel dels={dels} transfers={transfers}/></>}
+        {view==="entregas"&&<Entregas dels={dels} advance={advance} setStatus={setStatus} onNova={()=>setShowNova(true)} podeEditar={podeEditar}/>}
+        {view==="rotas"&&<Rotas dels={dels}/>}
+        {view==="transferencias"&&<Transferencias transfers={transfers} advanceTransfer={advanceTransfer} podeEditar={podeEditar}/>}
+        {view==="ranking"&&<Ranking dels={dels}/>}
+        {view==="semana"&&<SemanaReport dels={dels} saidas={saidas}/>}
+        {view==="clientes"&&<Clientes dels={dels} clientes={clientes} podeEditar={podeEditar} onImportar={importarClientes}/>}
+        {view==="usuarios"&&perfil.papel==="admin"&&<Usuarios users={users}/>}
+      </>)}
+    </main>
+
+    {showNova&&<NovaEntrega dels={dels} onClose={()=>setShowNova(false)} onSave={addDelivery}/>}
+  </div>;
+}
+
+/* ===================== Telas de gate ===================== */
+function Setup(){
+  return <div className="gate"><div className="gate-card">
+    <div className="gate-logo">A</div>
+    <h2>Configuração pendente</h2>
+    <p>Falta colar a config do seu projeto Firebase.</p>
+    <div className="gate-note">
+      1. Crie um projeto em <code>console.firebase.google.com</code><br/>
+      2. Ative <b>Authentication → E-mail/senha</b> e crie o <b>Firestore Database</b><br/>
+      3. Copie a config do app web e cole no bloco <code>window.__FIREBASE_CONFIG__</code> deste arquivo<br/>
+      4. Publique no GitHub Pages e recarregue
+    </div>
+  </div></div>;
+}
+function Login(){
+  const [email,setEmail]=useState("");const [senha,setSenha]=useState("");
+  const [erro,setErro]=useState("");const [busy,setBusy]=useState(false);
+  const entrar=async()=>{setBusy(true);setErro("");
+    try{await auth.signInWithEmailAndPassword(email.trim(),senha);}
+    catch(e){const map={"auth/invalid-credential":"E-mail ou senha incorretos.","auth/invalid-email":"E-mail inválido.","auth/user-disabled":"Usuário desativado.","auth/too-many-requests":"Muitas tentativas. Aguarde um pouco."};setErro(map[e.code]||e.message);setBusy(false);}
+  };
+  return <div className="gate"><div className="gate-card">
+    <div className="gate-logo">A</div>
+    <h2>AutoRota Pro</h2><p>Entre com seu e-mail e senha.</p>
+    {erro&&<div className="gate-err">{erro}</div>}
+    <div className="gate-field"><label>E-mail</label><input value={email} onChange={e=>setEmail(e.target.value)} inputMode="email" onKeyDown={e=>e.key==="Enter"&&entrar()} placeholder="email@exemplo.com"/></div>
+    <div className="gate-field"><label>Senha</label><input value={senha} onChange={e=>setSenha(e.target.value)} type="password" onKeyDown={e=>e.key==="Enter"&&entrar()} placeholder="••••••"/></div>
+    <button className="gate-btn" disabled={busy||!email||!senha} onClick={entrar}>{busy?"Entrando…":"Entrar"}</button>
+  </div></div>;
+}
+function SemAcesso(){
+  return <div className="gate"><div className="gate-card">
+    <div className="gate-logo" style={{background:"var(--red)"}}>!</div>
+    <h2>Acesso não liberado</h2>
+    <p>Sua conta existe, mas ainda não tem permissão neste sistema.</p>
+    <div className="gate-note">
+      Peça a um <b>administrador</b> para cadastrar seu acesso na aba <b>Usuários</b>.<br/><br/>
+      <b>É o primeiro administrador?</b> No Firestore, crie manualmente um documento na coleção <code>users</code> com o ID = seu UID (Authentication), contendo:<br/>
+      <code>papel: "admin"</code> · <code>ativo: true</code> · <code>nome: "Seu nome"</code>
+    </div>
+    <button className="gate-btn" style={{background:"var(--line2)",color:"var(--text)",marginTop:18}} onClick={()=>auth.signOut()}>Sair</button>
+  </div></div>;
+}
+function Loading(){return <div className="gate"><div className="spin"/></div>;}
+
+/* ===================== Root ===================== */
+function Root(){
+  const [estado,setEstado]=useState("loading"); // loading|login|noacesso|app
+  const [perfil,setPerfil]=useState(null);
+  useEffect(()=>{
+    if(!CONFIG_OK)return;
+    return auth.onAuthStateChanged(async u=>{
+      if(!u){setPerfil(null);setEstado("login");return;}
+      try{
+        const doc=await db.collection("users").doc(u.uid).get();
+        if(doc.exists&&doc.data().ativo){setPerfil({uid:u.uid,...doc.data()});setEstado("app");}
+        else setEstado("noacesso");
+      }catch(e){setEstado("noacesso");}
+    });
+  },[]);
+  if(!CONFIG_OK)return <Setup/>;
+  if(estado==="loading")return <Loading/>;
+  if(estado==="login")return <Login/>;
+  if(estado==="noacesso")return <SemAcesso/>;
+  return <App perfil={perfil}/>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
+</script>
+
+<!-- Compilador: força runtime CLÁSSICO (React.createElement) em vez do automático,
+     que emitiria `import react/jsx-runtime` e quebraria num <script> comum. -->
+<script>
+(function () {
+  function erroNaTela(msg) {
+    document.getElementById("root").innerHTML =
+      '<div style="max-width:620px;margin:60px auto;font-family:sans-serif;color:#E9EBEF;padding:24px;border:1px solid #2A2E37;border-radius:14px;background:#16181D">'
+      + '<h2 style="color:#FB6464;margin:0 0 8px">Falha ao iniciar</h2>'
+      + '<p style="color:#8A909B;font-size:13px;margin:0 0 12px">Provável CDN bloqueado/sem internet, ou erro no código. Detalhe:</p>'
+      + '<pre style="white-space:pre-wrap;color:#F4A724;font-size:12px;margin:0">' + String(msg) + '</pre></div>';
+  }
+  function boot() {
+    try {
+      if (!window.Babel) return erroNaTela("Babel não carregou (verifique a conexão / bloqueadores).");
+      if (!window.React || !window.ReactDOM) return erroNaTela("React não carregou (verifique a conexão / bloqueadores).");
+      var src = document.getElementById("app-src").textContent;
+      var out = Babel.transform(src, { presets: [["react", { runtime: "classic" }]] }).code;
+      var s = document.createElement("script");
+      s.textContent = out;
+      document.body.appendChild(s);
+    } catch (e) {
+      erroNaTela(e && e.message ? e.message : e);
+      console.error(e);
+    }
+  }
+  if (document.readyState === "complete" || document.readyState === "interactive") boot();
+  else window.addEventListener("DOMContentLoaded", boot);
+})();
+</script>
+</body>
+</html>
