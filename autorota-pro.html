@@ -200,6 +200,25 @@ a{color:inherit}
 @keyframes sp{to{transform:rotate(360deg)}}
 
 /* IMPORTAR CSV */
+.driver-acts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px}
+.da-btn{border:0;border-radius:12px;padding:13px;font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit}
+.da-btn.amber{background:var(--amber);color:var(--bg)}
+.da-btn.ghost{background:transparent;border:1px solid var(--line2);color:var(--text)}
+.stopcard{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:13px 14px;margin-bottom:8px}
+.stopcard-acts{display:flex;align-items:center;gap:8px}
+.ic{display:inline-flex;align-items:center;justify-content:center;gap:5px;background:var(--bg);border:1px solid var(--line2);color:var(--text);border-radius:9px;padding:9px 11px;text-decoration:none;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
+.ic.entregar{background:var(--green);color:#05230f;border:0}
+.cp-input{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:12px;color:var(--text);font-size:14px;outline:none}
+.cp-input:focus{border-color:rgba(244,167,36,.53)}
+.cp-list{margin-top:8px;border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:260px;overflow-y:auto}
+.cp-item{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);padding:11px 13px;cursor:pointer;color:var(--text);font-family:inherit;font-size:13.5px}
+.cp-item:hover{background:var(--panel2)}
+.cp-item:last-child{border-bottom:0}
+.cp-item.novo{color:var(--amber);font-weight:600}
+.cp-sel{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:12px 14px}
+input[type=time]{color-scheme:dark}
+
+/* CSV antigo */
 .csv-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px 20px;border:2px dashed var(--line2);border-radius:14px;cursor:pointer;background:var(--bg)}
 .csv-drop:hover{border-color:rgba(244,167,36,.5)}
 .csv-ta{width:100%;min-height:96px;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:11px;color:var(--text);font-size:12.5px;font-family:'JetBrains Mono',monospace;outline:none;resize:vertical}
@@ -294,6 +313,8 @@ const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAcwAAADECAIAAACdnYYIAA
 const brl = v => "R$ "+(Number(v)||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 const nome = id => (COURIERS.find(c=>c.id===id)||{}).nome || id || "—";
 const horaAgora = () => new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+const hm = () => { const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+const horaParaTs = hora => { if(!/^\d{1,2}:\d{2}$/.test(hora||"")) return Date.now(); const [h,m]=hora.split(":").map(Number); const d=new Date(); d.setHours(h,m,0,0); return d.getTime(); };
 const rotulo = s => ({separacao:"Separar",separando:"Pronto",pronto:"Em rota",rota:"Entregue"}[s]||"Avançar");
 
 function metrics(dels){
@@ -892,33 +913,139 @@ function NovaEntrega({dels,onClose,onSave}){
 }
 
 /* ===================== MOTORISTA ===================== */
-function Motorista({dels,courier,setStatus,onSaida}){
+function Motorista({dels,courier,clientes,onCriar,onSaida,onConcluir}){
   const co=COURIERS.find(c=>c.id===courier)||{nome:"Entregador",veiculo:"",placa:""};
+  const podeAgir=!!(onCriar||onSaida||onConcluir); // false = admin/gerente só observando
   const minhas=dels.filter(d=>d.courier===courier);
-  const proxima=minhas.find(d=>d.status==="rota")||minhas.find(d=>d.status==="pronto");
+  const emRota=minhas.filter(d=>d.status==="rota");
   const feitas=minhas.filter(d=>d.status==="entregue").length;
-  const pend=minhas.filter(d=>d.status!=="entregue"&&d.status!=="problema").length;
+  const pend=emRota.length;
+  const [novo,setNovo]=useState(false);
+  const [saida,setSaida]=useState(false);
+  const [concluir,setConcluir]=useState(null); // entrega a concluir
+
   return <div className="driver">
     <div className="driver-head"><div className="logo">🏍</div><div><div style={{fontWeight:700}}>{co.nome}</div><div className="sub2">{co.veiculo} · {co.placa}</div></div>
-      <div className="driver-stats"><div><b style={{color:"var(--green)"}}>{feitas}</b><span>feitas</span></div><div><b style={{color:"var(--amber)"}}>{pend}</b><span>pendentes</span></div></div></div>
-    {onSaida&&<button className="tf-receber" style={{marginBottom:16,marginTop:0}} onClick={()=>{onSaida(courier);alert("Saída registrada. Bom trabalho!");}}>🏍 Registrar saída da loja</button>}
-    {proxima?<div className="next">
-      <div className="next-tag">Próxima entrega</div>
-      <div className="next-cli">{proxima.cliente}</div>
-      <div className="sub2" style={{marginBottom:4}}>{proxima.end} · {proxima.bairro}, {proxima.cidade}</div>
-      <div className="next-actions">
-        <a className="act" href="tel:+5527999999999">📞<span>Ligar</span></a>
-        <a className="act" target="_blank" rel="noreferrer" href="https://wa.me/5527999999999">💬<span>WhatsApp</span></a>
-        <a className="act" target="_blank" rel="noreferrer" href={"https://www.google.com/maps/search/"+encodeURIComponent(proxima.end+", "+proxima.cidade)}>📍<span>Mapa</span></a>
-        <button className="act" onClick={()=>alert("Foto da mercadoria/NF (fase de comprovante).")}>📷<span>Foto</span></button>
-      </div>
-      <button className="confirm" onClick={()=>setStatus(proxima.id,"entregue")}>✓ Confirmar entrega</button>
-    </div>:<div className="next" style={{textAlign:"center",color:"var(--mut)"}}>Tudo entregue por aqui. 🏁</div>}
-    <div className="label">Minhas entregas</div>
-    {minhas.map(d=>{const st=STATUS[d.status]||STATUS.separacao;return <div key={d.id} className="dcard">
-      <div style={{flex:1}}><div style={{fontWeight:600}}>{d.cliente}</div><div className="sub2">{d.bairro}, {d.cidade} · #{d.pedido}</div></div><Badge cor={st.cor} label={st.label}/></div>;})}
-    {minhas.length===0&&<div className="empty">Nenhuma entrega atribuída.</div>}
+      <div className="driver-stats"><div><b style={{color:"var(--green)"}}>{feitas}</b><span>feitas</span></div><div><b style={{color:"var(--amber)"}}>{pend}</b><span>na rota</span></div></div></div>
+
+    {podeAgir&&<div className="driver-acts">
+      {onCriar&&<button className="da-btn amber" onClick={()=>setNovo(true)}>＋ Nova entrega</button>}
+      {onSaida&&<button className="da-btn ghost" onClick={()=>setSaida(true)}>🏍 Registrar saída</button>}
+    </div>}
+
+    <div className="label">Minha rota de hoje</div>
+    {emRota.length===0
+      ? <div className="empty">{podeAgir?"Nenhuma entrega na rota. Toque em \"Nova entrega\" para adicionar.":"Sem entregas na rota."}</div>
+      : emRota.map(d=><div key={d.id} className="stopcard">
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700}}>{d.cliente}</div>
+            <div className="sub2">{[d.end,d.bairro,d.cidade].filter(Boolean).join(" · ")||"—"}</div>
+          </div>
+          <div className="stopcard-acts">
+            {d.end&&<a className="ic" target="_blank" rel="noreferrer" href={"https://www.google.com/maps/search/"+encodeURIComponent([d.end,d.bairro,d.cidade].filter(Boolean).join(", "))}>📍</a>}
+            {onConcluir&&<button className="ic entregar" onClick={()=>setConcluir(d)}>✓ Entregar</button>}
+          </div>
+        </div>)}
+
+    <div className="label">Entregues hoje</div>
+    {minhas.filter(d=>d.status==="entregue").length===0
+      ? <div className="empty" style={{padding:16}}>Nenhuma entrega concluída ainda.</div>
+      : minhas.filter(d=>d.status==="entregue").map(d=><div key={d.id} className="dcard">
+          <div style={{flex:1}}><div style={{fontWeight:600}}>{d.cliente}</div>
+          <div className="sub2">{d.entregueEm?("entregue "+d.entregueEm):""}{d.nota?" · NF "+d.nota:""}</div></div>
+          <Badge cor="var(--green)" label="Entregue"/></div>)}
+
+    {novo&&<NovaEntregaMotoboy clientes={clientes} onClose={()=>setNovo(false)} onSave={async n=>{await onCriar({...n,courier,status:"rota"});setNovo(false);}}/>}
+    {saida&&<SaidaModal onClose={()=>setSaida(false)} onSave={async h=>{await onSaida(courier,h);setSaida(false);alert("Saída registrada às "+h+". Bom trabalho!");}}/>}
+    {concluir&&<ConcluirModal entrega={concluir} onClose={()=>setConcluir(null)} onSave={async dados=>{await onConcluir(concluir.id,dados);setConcluir(null);}}/>}
   </div>;
+}
+
+/* --- seletor de cliente (busca na base importada) --- */
+function ClientePicker({clientes,onPick}){
+  const [q,setQ]=useState("");
+  const res=q.trim()?clientes.filter(c=>((c.nome||"")+(c.codigo||"")).toLowerCase().includes(q.toLowerCase())).slice(0,7):[];
+  return <div>
+    <input className="cp-input" value={q} onChange={e=>setQ(e.target.value)} placeholder="Digite o nome do cliente…" autoFocus/>
+    {q.trim()&&<div className="cp-list">
+      {res.map((c,i)=><button key={i} className="cp-item" onClick={()=>onPick({nome:c.nome,end:c.endereco||"",bairro:c.bairro||"",cidade:c.cidade||""})}>
+        <span style={{fontWeight:600}}>{c.nome}</span>
+        <span className="sub2">{[c.bairro,c.cidade].filter(Boolean).join(", ")||(c.codigo?"cód "+c.codigo:"")}</span>
+      </button>)}
+      <button className="cp-item novo" onClick={()=>onPick({nome:q.trim(),novo:true})}>
+        ＋ Usar "<b>{q.trim()}</b>" como cliente novo
+      </button>
+    </div>}
+  </div>;
+}
+
+function NovaEntregaMotoboy({clientes,onClose,onSave}){
+  const [sel,setSel]=useState(null); // cliente escolhido
+  const [loja,setLoja]=useState("COL");
+  const [valor,setValor]=useState("");
+  const [busy,setBusy]=useState(false);
+  const salvar=async()=>{
+    if(!sel)return; setBusy(true);
+    try{ await onSave({cliente:sel.nome,end:sel.end||"",bairro:sel.bairro||"",cidade:sel.cidade||"",loja,valor:parseFloat(String(valor).replace(",","."))||0}); }
+    finally{ setBusy(false); }
+  };
+  return <div className="modal-bg" onClick={busy?null:onClose}><div className="modal" onClick={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><div className="modal-title">Nova entrega</div><div className="sub2">escolha o cliente para adicionar à sua rota</div></div>{!busy&&<button className="modal-x" onClick={onClose}>×</button>}</div>
+    <div style={{padding:"18px 20px"}}>
+      {!sel
+        ? <ClientePicker clientes={clientes} onPick={setSel}/>
+        : <>
+            <div className="cp-sel">
+              <div><div style={{fontWeight:700}}>{sel.nome}</div>
+              <div className="sub2">{[sel.bairro,sel.cidade].filter(Boolean).join(", ")||(sel.novo?"cliente novo":"—")}</div></div>
+              <button className="mini" onClick={()=>setSel(null)}>trocar</button>
+            </div>
+            <div className="form" style={{padding:0,marginTop:14,gridTemplateColumns:"1fr 1fr"}}>
+              <Field label="Loja de origem"><select value={loja} onChange={e=>setLoja(e.target.value)}>{Object.entries(STORES).map(([k,v])=><option key={k} value={k}>{v.sigla}</option>)}</select></Field>
+              <Field label="Valor (opcional)"><input value={valor} onChange={e=>setValor(e.target.value)} placeholder="0,00" inputMode="decimal"/></Field>
+            </div>
+          </>}
+    </div>
+    <div className="modal-foot">
+      {!busy&&<button className="btn-ghost" onClick={onClose}>Cancelar</button>}
+      {sel&&<button className="btn-amber" disabled={busy} onClick={salvar}>{busy?"Adicionando…":"Adicionar à rota"}</button>}
+    </div>
+  </div></div>;
+}
+
+function SaidaModal({onClose,onSave}){
+  const [hora,setHora]=useState(hm());
+  const [busy,setBusy]=useState(false);
+  return <div className="modal-bg" onClick={busy?null:onClose}><div className="modal" style={{maxWidth:360}} onClick={e=>e.stopPropagation()}>
+    <div className="modal-head"><div className="modal-title">Saída da loja</div>{!busy&&<button className="modal-x" onClick={onClose}>×</button>}</div>
+    <div style={{padding:"18px 20px"}}>
+      <Field label="Hora que está saindo" full><input type="time" value={hora} onChange={e=>setHora(e.target.value)}/></Field>
+    </div>
+    <div className="modal-foot">
+      {!busy&&<button className="btn-ghost" onClick={onClose}>Cancelar</button>}
+      <button className="btn-amber" disabled={busy||!hora} onClick={async()=>{setBusy(true);try{await onSave(hora);}catch(e){setBusy(false);}}}>{busy?"Registrando…":"Registrar saída"}</button>
+    </div>
+  </div></div>;
+}
+
+function ConcluirModal({entrega,onClose,onSave}){
+  const [hora,setHora]=useState(hm());
+  const [nota,setNota]=useState("");
+  const [busy,setBusy]=useState(false);
+  const valido=hora&&nota.trim();
+  return <div className="modal-bg" onClick={busy?null:onClose}><div className="modal" style={{maxWidth:380}} onClick={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><div className="modal-title">Confirmar entrega</div><div className="sub2">{entrega.cliente}</div></div>{!busy&&<button className="modal-x" onClick={onClose}>×</button>}</div>
+    <div style={{padding:"18px 20px"}}>
+      <div className="form" style={{padding:0,gridTemplateColumns:"1fr 1fr"}}>
+        <Field label="Hora da entrega"><input type="time" value={hora} onChange={e=>setHora(e.target.value)}/></Field>
+        <Field label="Nº da nota"><input value={nota} onChange={e=>setNota(e.target.value)} placeholder="Ex.: 12345" inputMode="numeric"/></Field>
+      </div>
+    </div>
+    <div className="modal-foot">
+      {!busy&&<button className="btn-ghost" onClick={onClose}>Cancelar</button>}
+      <button className="btn-amber" disabled={!valido||busy} onClick={async()=>{setBusy(true);try{await onSave({hora,nota:nota.trim()});}catch(e){setBusy(false);}}}>{busy?"Salvando…":"✓ Confirmar entrega"}</button>
+    </div>
+  </div></div>;
 }
 
 /* ===================== APP (autenticado) ===================== */
@@ -934,7 +1061,7 @@ function App({perfil}){
   const [showNova,setShowNova]=useState(false);
 
   const isMotoboy=perfil.papel==="motoboy";
-  const podeEditar=["admin","gerente","vendedor"].includes(perfil.papel);
+  const podeEditar=perfil.papel==="admin"; // motoboy cria na tela dele; gerente/vendedor só controlam
   const navItens=NAV_BY_ROLE[perfil.papel]||[];
 
   useEffect(()=>{
@@ -949,8 +1076,10 @@ function App({perfil}){
 
   const addDelivery=async novo=>{
     try{await db.collection("entregas").add({
-      pedido:novo.pedido,cliente:novo.cliente,end:novo.end,bairro:novo.bairro,cidade:novo.cidade,
-      loja:novo.loja,courier:novo.courier,valor:novo.valor,status:"separacao",
+      pedido:novo.pedido||("M"+String(Date.now()).slice(-6)),
+      cliente:novo.cliente,end:novo.end||"",bairro:novo.bairro||"",cidade:novo.cidade||"",
+      loja:novo.loja||"COL",courier:novo.courier,valor:Number(novo.valor)||0,
+      nota:novo.nota||null,status:novo.status||"separacao",
       noPrazo:true,km:+(2+Math.random()*8).toFixed(1),entregueEm:null,criadoEm:Date.now()
     });setShowNova(false);}catch(e){alert("Erro ao salvar: "+e.message);}
   };
@@ -959,8 +1088,13 @@ function App({perfil}){
     try{await db.collection("entregas").doc(id).update(upd);}catch(e){alert(e.message);}};
   const setStatus=async(id,status)=>{const upd={status,entregueEm:status==="entregue"?horaAgora():null};if(status==="entregue")upd.entregueEmTs=Date.now();
     try{await db.collection("entregas").doc(id).update(upd);}catch(e){alert(e.message);}};
+  // motoboy conclui a entrega informando a hora e o número da nota
+  const concluirEntrega=async(id,{hora,nota})=>{
+    try{await db.collection("entregas").doc(id).update({
+      status:"entregue", entregueEm:hora||horaAgora(), entregueEmTs:horaParaTs(hora), nota:nota||null
+    });}catch(e){alert(e.message);}};
   const advanceTransfer=async id=>{try{await db.collection("transferencias").doc(id).update({status:"recebida"});}catch(e){alert(e.message);}};
-  const registrarSaida=async courier=>{try{await db.collection("saidas").add({courier,ts:Date.now()});}catch(e){alert(e.message);}};
+  const registrarSaida=async(courier,hora)=>{try{await db.collection("saidas").add({courier,ts:horaParaTs(hora),hora:hora||hm()});}catch(e){alert(e.message);}};
   const importarClientes=async(itens,onProg)=>{
     const CH=400; // Firestore aceita até 500 operações por lote
     for(let i=0;i<itens.length;i+=CH){
@@ -1027,7 +1161,7 @@ function App({perfil}){
     <main className="main">
       {isMotoboy ? (
         perfil.motoboyId
-          ? <Motorista dels={dels} courier={perfil.motoboyId} setStatus={setStatus} onSaida={registrarSaida}/>
+          ? <Motorista dels={dels} courier={perfil.motoboyId} clientes={clientes} onCriar={addDelivery} onSaida={registrarSaida} onConcluir={concluirEntrega}/>
           : <div className="empty" style={{maxWidth:420,margin:"40px auto",border:"1px solid var(--line)",borderRadius:14,background:"var(--panel)"}}>
               <div style={{fontSize:30,marginBottom:10}}>⚠️</div>
               <b style={{color:"var(--text)",display:"block",marginBottom:6}}>Conta não vinculada</b>
@@ -1035,7 +1169,7 @@ function App({perfil}){
               Peça a um administrador para editar seu cadastro na aba <b>Usuários</b>.
             </div>
       ) : modo==="motorista" ? (
-        <Motorista dels={dels} courier={mbSel} setStatus={setStatus} onSaida={registrarSaida}/>
+        <Motorista dels={dels} courier={mbSel} clientes={clientes}/>
       ) : (<>
         {view==="painel"&&<>{dels.length===0&&perfil.papel==="admin"&&<div style={{marginBottom:14}}><button className="newbtn" onClick={seedDemo}>Popular com dados de exemplo</button></div>}<Painel dels={dels} transfers={transfers}/></>}
         {view==="entregas"&&<Entregas dels={dels} advance={advance} setStatus={setStatus} onNova={()=>setShowNova(true)} podeEditar={podeEditar}/>}
