@@ -205,6 +205,10 @@ a{color:inherit}
 .da-btn.amber{background:var(--amber);color:var(--bg)}
 .da-btn.ghost{background:transparent;border:1px solid var(--line2);color:var(--text)}
 .stopcard{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:13px 14px;margin-bottom:8px}
+.stop-n{width:24px;height:24px;flex:0 0 24px;border-radius:99px;background:rgba(244,167,36,.14);color:var(--amber);font-weight:700;font-size:12px;display:grid;place-items:center}
+.kmbanner{background:rgba(244,167,36,.12);border:1px solid rgba(244,167,36,.4);color:var(--amber);border-radius:11px;padding:12px 14px;margin-bottom:12px;font-size:13px;cursor:pointer;font-weight:500}
+.kmbanner b{font-weight:700}
+.addstop{border:1px dashed var(--line2);border-radius:12px;padding:14px;margin-top:4px}
 .stopcard-acts{display:flex;align-items:center;gap:8px}
 .ic{display:inline-flex;align-items:center;justify-content:center;gap:5px;background:var(--bg);border:1px solid var(--line2);color:var(--text);border-radius:9px;padding:9px 11px;text-decoration:none;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
 .ic.entregar{background:var(--green);color:#05230f;border:0}
@@ -352,25 +356,34 @@ function inicioSemana(offset){ // offset 0 = esta semana, -1 = semana passada. S
   const ini=d.getTime(); return {ini, fim:ini+7*24*3600*1000};
 }
 function noIntervalo(ts,jan){ return typeof ts==="number" && ts>=jan.ini && ts<jan.fim; }
+function semanaKey(offset){ const {ini}=inicioSemana(offset); const d=new Date(ini); const p=n=>String(n).padStart(2,"0"); return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); }
+// km real da semana por motoboy = hodômetro de sexta − hodômetro de segunda (null se faltar algum)
+function kmSemanaPorMotoboy(kmsemana, chave){
+  const map={};
+  COURIERS.forEach(c=>{
+    const doc=(kmsemana||[]).find(k=>k.courier===c.id && k.semana===chave);
+    map[c.id] = (doc && typeof doc.kmInicio==="number" && typeof doc.kmFim==="number") ? Math.max(0, doc.kmFim-doc.kmInicio) : null;
+  });
+  return map;
+}
 
-function relatorioSemana(dels, saidas, jan){
+function relatorioSemana(dels, saidas, jan, kmMap){
+  kmMap = kmMap || {};
   const linhas = COURIERS.map(c=>{
-    // entregas concluídas nesta semana (usa carimbo real; ignora as sem data)
     const ent = dels.filter(d=>d.courier===c.id && d.status==="entregue" && noIntervalo(d.entregueEmTs, jan));
     const entregas = ent.length;
-    const km = +ent.reduce((s,d)=>s+(d.km||0),0).toFixed(1);
+    const km = (kmMap[c.id]==null) ? null : kmMap[c.id];  // km real (hodômetro); null = não lançado
     const saidasN = saidas.filter(s=>s.courier===c.id && noIntervalo(s.ts, jan)).length;
     return {id:c.id, nome:c.nome, entregas, km, saidas:saidasN};
   });
-  // normaliza cada métrica pelo máximo da semana (0–100)
   const max = {
     entregas: Math.max(1,...linhas.map(l=>l.entregas)),
-    km:       Math.max(1,...linhas.map(l=>l.km)),
+    km:       Math.max(1,...linhas.map(l=>l.km||0)),
     saidas:   Math.max(1,...linhas.map(l=>l.saidas)),
   };
   linhas.forEach(l=>{
     l.nEntregas = l.entregas/max.entregas*100;
-    l.nKm       = l.km/max.km*100;
+    l.nKm       = (l.km||0)/max.km*100;   // km em branco conta como 0 (motoboy desce no ranking)
     l.nSaidas   = l.saidas/max.saidas*100;
     l.indice = +(l.nEntregas*PESOS_SEMANA.entregas + l.nSaidas*PESOS_SEMANA.saidas + l.nKm*PESOS_SEMANA.km).toFixed(1);
   });
@@ -604,14 +617,17 @@ function Ranking({dels}){
 }
 
 /* ===================== RELATÓRIO DA SEMANA ===================== */
-function SemanaReport({dels,saidas}){
+function SemanaReport({dels,saidas,kmsemana}){
   const [offset,setOffset]=useState(0);
   const jan=useMemo(()=>inicioSemana(offset),[offset]);
-  const linhas=useMemo(()=>relatorioSemana(dels,saidas,jan),[dels,saidas,jan]);
+  const kmMap=useMemo(()=>kmSemanaPorMotoboy(kmsemana,semanaKey(offset)),[kmsemana,offset]);
+  const linhas=useMemo(()=>relatorioSemana(dels,saidas,jan,kmMap),[dels,saidas,jan,kmMap]);
   const temDados=linhas.some(l=>l.entregas||l.saidas||l.km);
+  const semKm=linhas.filter(l=>(l.entregas||l.saidas)&&l.km==null).map(l=>l.nome);
   const vencedor=temDados?linhas[0]:null;
   const fmtData=ts=>new Date(ts).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});
   const periodo=fmtData(jan.ini)+" a "+fmtData(jan.fim-1);
+  const kmTxt=v=>v==null?"—":v+" km";
   return <div>
     <Header titulo="Melhor entregador da semana" sub={"período "+periodo+" · índice = entregas 60% · saídas 20% · km 20% (normalizados)"}/>
 
@@ -620,13 +636,13 @@ function SemanaReport({dels,saidas}){
       <button className={"rota-tab"+(offset===-1?" on":"")} onClick={()=>setOffset(-1)}>Semana passada</button>
     </div>
 
-    {!temDados ? <div className="empty">Sem dados nesta semana. As entregas contam quando marcadas como "Entregue", e as saídas quando o motoboy registra "Saí da loja".</div> : <>
+    {!temDados ? <div className="empty">Sem dados nesta semana. As entregas contam quando marcadas como "Entregue"; as saídas, a cada rota criada; o km, quando o motoboy lança o hodômetro na segunda e na sexta.</div> : <>
       <div className="card" style={{marginBottom:14,display:"flex",alignItems:"center",gap:16,borderColor:"rgba(244,167,36,.4)",background:"linear-gradient(90deg,rgba(244,167,36,.08),var(--panel) 55%)"}}>
         <div style={{fontSize:34}}>🏆</div>
         <div style={{flex:1}}>
           <div className="sub2" style={{textTransform:"uppercase",letterSpacing:1,fontSize:10.5,color:"var(--amber)",fontWeight:700}}>Melhor da semana</div>
           <div style={{fontSize:22,fontWeight:700}}>{vencedor.nome}</div>
-          <div className="sub2">{vencedor.entregas} entregas · {vencedor.saidas} saídas · {vencedor.km} km · índice {vencedor.indice}</div>
+          <div className="sub2">{vencedor.entregas} entregas · {vencedor.saidas} saídas · {kmTxt(vencedor.km)} · índice {vencedor.indice}</div>
         </div>
       </div>
 
@@ -639,13 +655,16 @@ function SemanaReport({dels,saidas}){
           <div style={{fontWeight:600}}>{l.nome}</div>
           <div className="mono">{l.entregas}</div>
           <div className="mono">{l.saidas}</div>
-          <div className="mono">{l.km}</div>
+          <div className="mono" style={{color:l.km==null?"var(--mut2)":"var(--text)"}}>{l.km==null?"—":l.km}</div>
           <div className="mono" style={{fontWeight:700,color:i===0?"var(--amber)":"var(--text)"}}>{l.indice}</div>
         </div>)}
       </div>
 
-      <div className="sub2" style={{marginTop:12,lineHeight:1.6}}>
-        O <b>índice</b> normaliza cada coluna pelo melhor da semana (0–100) e aplica os pesos, pra somar métricas de escalas diferentes sem o km dominar. Km bruto entra com peso baixo porque rodar mais não é necessariamente melhor.
+      {semKm.length>0&&<div className="sub2" style={{marginTop:10,color:"#E8B04B"}}>
+        Sem km lançado nesta semana: {semKm.join(", ")}. O km é a diferença entre o hodômetro de sexta e o de segunda — quem não lançar fica com km zerado no índice.
+      </div>}
+      <div className="sub2" style={{marginTop:10,lineHeight:1.6}}>
+        O <b>índice</b> normaliza cada coluna pelo melhor da semana (0–100) e aplica os pesos. O <b>km</b> é medição real do hodômetro (sexta − segunda), com peso baixo porque rodar mais não é necessariamente melhor.
       </div>
     </>}
   </div>;
@@ -913,33 +932,46 @@ function NovaEntrega({dels,onClose,onSave}){
 }
 
 /* ===================== MOTORISTA ===================== */
-function Motorista({dels,courier,clientes,onCriar,onSaida,onConcluir}){
+function Motorista({dels,courier,clientes,onCriarRota,onConcluir,onKm,kmDoc}){
   const co=COURIERS.find(c=>c.id===courier)||{nome:"Entregador",veiculo:"",placa:""};
-  const podeAgir=!!(onCriar||onSaida||onConcluir); // false = admin/gerente só observando
+  const podeAgir=!!(onCriarRota||onConcluir); // false = admin/gerente só observando
   const minhas=dels.filter(d=>d.courier===courier);
   const emRota=minhas.filter(d=>d.status==="rota");
-  const feitas=minhas.filter(d=>d.status==="entregue").length;
-  const pend=emRota.length;
+  const entregues=minhas.filter(d=>d.status==="entregue");
+  const feitas=entregues.length;
   const [novo,setNovo]=useState(false);
-  const [saida,setSaida]=useState(false);
-  const [concluir,setConcluir]=useState(null); // entrega a concluir
+  const [concluir,setConcluir]=useState(null);
+  const [km,setKm]=useState(null); // 'kmInicio' | 'kmFim'
+
+  // lembrete de km ao entrar (site não notifica sozinho — aviso na tela)
+  const dow=new Date().getDay(); // 1=seg ... 5=sex 6=sab 0=dom
+  const temInicio=kmDoc&&typeof kmDoc.kmInicio==="number";
+  const temFim=kmDoc&&typeof kmDoc.kmFim==="number";
+  const avisoInicio=podeAgir&&onKm&&!temInicio;                    // km inicial faltando
+  const avisoFim=podeAgir&&onKm&&temInicio&&!temFim&&(dow>=5||dow===0); // sexta+ e ainda sem km final
 
   return <div className="driver">
     <div className="driver-head"><div className="logo">🏍</div><div><div style={{fontWeight:700}}>{co.nome}</div><div className="sub2">{co.veiculo} · {co.placa}</div></div>
-      <div className="driver-stats"><div><b style={{color:"var(--green)"}}>{feitas}</b><span>feitas</span></div><div><b style={{color:"var(--amber)"}}>{pend}</b><span>na rota</span></div></div></div>
+      <div className="driver-stats"><div><b style={{color:"var(--green)"}}>{feitas}</b><span>entregues</span></div><div><b style={{color:"var(--amber)"}}>{emRota.length}</b><span>na rota</span></div></div></div>
+
+    {avisoInicio&&<div className="kmbanner" onClick={()=>setKm("kmInicio")}>
+      🛵 Informe o <b>km da moto (início da semana)</b> — toque para lançar</div>}
+    {avisoFim&&<div className="kmbanner" onClick={()=>setKm("kmFim")}>
+      🏁 Informe o <b>km da moto (fim da semana)</b> — toque para lançar</div>}
 
     {podeAgir&&<div className="driver-acts">
-      {onCriar&&<button className="da-btn amber" onClick={()=>setNovo(true)}>＋ Nova entrega</button>}
-      {onSaida&&<button className="da-btn ghost" onClick={()=>setSaida(true)}>🏍 Registrar saída</button>}
+      {onCriarRota&&<button className="da-btn amber" onClick={()=>setNovo(true)}>＋ Nova entrega / rota</button>}
+      {onKm&&<button className="da-btn ghost" onClick={()=>setKm(temInicio&&!temFim?"kmFim":"kmInicio")}>🛵 Registrar km</button>}
     </div>}
 
     <div className="label">Minha rota de hoje</div>
     {emRota.length===0
-      ? <div className="empty">{podeAgir?"Nenhuma entrega na rota. Toque em \"Nova entrega\" para adicionar.":"Sem entregas na rota."}</div>
-      : emRota.map(d=><div key={d.id} className="stopcard">
+      ? <div className="empty">{podeAgir?"Sem rota ativa. Toque em \"Nova entrega / rota\" para montar a rota e sair.":"Sem entregas na rota."}</div>
+      : emRota.map((d,i)=><div key={d.id} className="stopcard">
+          <div className="stop-n">{i+1}</div>
           <div style={{flex:1}}>
             <div style={{fontWeight:700}}>{d.cliente}</div>
-            <div className="sub2">{[d.end,d.bairro,d.cidade].filter(Boolean).join(" · ")||"—"}</div>
+            <div className="sub2">{[d.end,d.bairro,d.cidade].filter(Boolean).join(" · ")||"—"}{d.nota?" · NF "+d.nota:""}</div>
           </div>
           <div className="stopcard-acts">
             {d.end&&<a className="ic" target="_blank" rel="noreferrer" href={"https://www.google.com/maps/search/"+encodeURIComponent([d.end,d.bairro,d.cidade].filter(Boolean).join(", "))}>📍</a>}
@@ -948,16 +980,16 @@ function Motorista({dels,courier,clientes,onCriar,onSaida,onConcluir}){
         </div>)}
 
     <div className="label">Entregues hoje</div>
-    {minhas.filter(d=>d.status==="entregue").length===0
+    {entregues.length===0
       ? <div className="empty" style={{padding:16}}>Nenhuma entrega concluída ainda.</div>
-      : minhas.filter(d=>d.status==="entregue").map(d=><div key={d.id} className="dcard">
+      : entregues.map(d=><div key={d.id} className="dcard">
           <div style={{flex:1}}><div style={{fontWeight:600}}>{d.cliente}</div>
           <div className="sub2">{d.entregueEm?("entregue "+d.entregueEm):""}{d.nota?" · NF "+d.nota:""}</div></div>
           <Badge cor="var(--green)" label="Entregue"/></div>)}
 
-    {novo&&<NovaEntregaMotoboy clientes={clientes} onClose={()=>setNovo(false)} onSave={async n=>{await onCriar({...n,courier,status:"rota"});setNovo(false);}}/>}
-    {saida&&<SaidaModal onClose={()=>setSaida(false)} onSave={async h=>{await onSaida(courier,h);setSaida(false);alert("Saída registrada às "+h+". Bom trabalho!");}}/>}
+    {novo&&<NovaRotaMotoboy clientes={clientes} onClose={()=>setNovo(false)} onSave={async payload=>{await onCriarRota(courier,payload);setNovo(false);}}/>}
     {concluir&&<ConcluirModal entrega={concluir} onClose={()=>setConcluir(null)} onSave={async dados=>{await onConcluir(concluir.id,dados);setConcluir(null);}}/>}
+    {km&&<KmModal campo={km} kmDoc={kmDoc} onClose={()=>setKm(null)} onSave={async v=>{await onKm(courier,km,v);setKm(null);}}/>}
   </div>;
 }
 
@@ -979,71 +1011,99 @@ function ClientePicker({clientes,onPick}){
   </div>;
 }
 
-function NovaEntregaMotoboy({clientes,onClose,onSave}){
-  const [sel,setSel]=useState(null); // cliente escolhido
+/* Monta a rota inteira (vários clientes, cada um com sua nota) e, ao criar, registra a saída */
+function NovaRotaMotoboy({clientes,onClose,onSave}){
   const [loja,setLoja]=useState("COL");
+  const [paradas,setParadas]=useState([]);   // {cliente,end,bairro,cidade,nota}
+  const [sel,setSel]=useState(null);          // cliente sendo adicionado
+  const [nota,setNota]=useState("");
   const [valor,setValor]=useState("");
   const [busy,setBusy]=useState(false);
-  const salvar=async()=>{
-    if(!sel)return; setBusy(true);
-    try{ await onSave({cliente:sel.nome,end:sel.end||"",bairro:sel.bairro||"",cidade:sel.cidade||"",loja,valor:parseFloat(String(valor).replace(",","."))||0}); }
+
+  const addParada=()=>{
+    if(!sel||!nota.trim())return;
+    setParadas(p=>[...p,{cliente:sel.nome,end:sel.end||"",bairro:sel.bairro||"",cidade:sel.cidade||"",nota:nota.trim(),valor:parseFloat(String(valor).replace(",","."))||0}]);
+    setSel(null);setNota("");setValor("");
+  };
+  const criar=async()=>{
+    if(!paradas.length)return; setBusy(true);
+    try{ await onSave({loja,paradas}); }
     finally{ setBusy(false); }
   };
-  return <div className="modal-bg" onClick={busy?null:onClose}><div className="modal" onClick={e=>e.stopPropagation()}>
-    <div className="modal-head"><div><div className="modal-title">Nova entrega</div><div className="sub2">escolha o cliente para adicionar à sua rota</div></div>{!busy&&<button className="modal-x" onClick={onClose}>×</button>}</div>
+
+  return <div className="modal-bg" onClick={busy?null:onClose}><div className="modal" style={{maxWidth:560}} onClick={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><div className="modal-title">Nova entrega / rota</div><div className="sub2">adicione os clientes com a nota em mãos · ao criar, sua saída é registrada</div></div>{!busy&&<button className="modal-x" onClick={onClose}>×</button>}</div>
+
     <div style={{padding:"18px 20px"}}>
-      {!sel
-        ? <ClientePicker clientes={clientes} onPick={setSel}/>
-        : <>
-            <div className="cp-sel">
-              <div><div style={{fontWeight:700}}>{sel.nome}</div>
-              <div className="sub2">{[sel.bairro,sel.cidade].filter(Boolean).join(", ")||(sel.novo?"cliente novo":"—")}</div></div>
-              <button className="mini" onClick={()=>setSel(null)}>trocar</button>
-            </div>
-            <div className="form" style={{padding:0,marginTop:14,gridTemplateColumns:"1fr 1fr"}}>
-              <Field label="Loja de origem"><select value={loja} onChange={e=>setLoja(e.target.value)}>{Object.entries(STORES).map(([k,v])=><option key={k} value={k}>{v.sigla}</option>)}</select></Field>
-              <Field label="Valor (opcional)"><input value={valor} onChange={e=>setValor(e.target.value)} placeholder="0,00" inputMode="decimal"/></Field>
-            </div>
-          </>}
+      <Field label="Loja de origem" full><select value={loja} onChange={e=>setLoja(e.target.value)}>{Object.entries(STORES).map(([k,v])=><option key={k} value={k}>{v.nome}</option>)}</select></Field>
+
+      {paradas.length>0&&<div style={{margin:"14px 0"}}>
+        <div className="sub2" style={{marginBottom:6}}>Paradas da rota ({paradas.length}):</div>
+        {paradas.map((p,i)=><div key={i} className="stopcard" style={{marginBottom:6}}>
+          <div className="stop-n">{i+1}</div>
+          <div style={{flex:1}}><div style={{fontWeight:600}}>{p.cliente}</div>
+            <div className="sub2">NF {p.nota}{[p.bairro,p.cidade].filter(Boolean).length?" · "+[p.bairro,p.cidade].filter(Boolean).join(", "):""}</div></div>
+          <button className="mini" style={{color:"var(--red)",borderColor:"rgba(251,100,100,.3)"}} onClick={()=>setParadas(a=>a.filter((_,k)=>k!==i))}>remover</button>
+        </div>)}
+      </div>}
+
+      <div className="addstop">
+        <div className="sub2" style={{marginBottom:8,fontWeight:600,color:"var(--text)"}}>Adicionar parada</div>
+        {!sel
+          ? <ClientePicker clientes={clientes} onPick={setSel}/>
+          : <>
+              <div className="cp-sel"><div><div style={{fontWeight:700}}>{sel.nome}</div>
+                <div className="sub2">{[sel.bairro,sel.cidade].filter(Boolean).join(", ")||(sel.novo?"cliente novo":"—")}</div></div>
+                <button className="mini" onClick={()=>setSel(null)}>trocar</button></div>
+              <div className="form" style={{padding:0,marginTop:12,gridTemplateColumns:"1fr 1fr"}}>
+                <Field label="Nº da nota"><input value={nota} onChange={e=>setNota(e.target.value)} placeholder="Ex.: 12345" inputMode="numeric" autoFocus/></Field>
+                <Field label="Valor (opcional)"><input value={valor} onChange={e=>setValor(e.target.value)} placeholder="0,00" inputMode="decimal"/></Field>
+              </div>
+              <button className="da-btn amber" style={{marginTop:12,width:"100%"}} disabled={!nota.trim()} onClick={addParada}>＋ Adicionar esta parada</button>
+            </>}
+      </div>
     </div>
+
     <div className="modal-foot">
       {!busy&&<button className="btn-ghost" onClick={onClose}>Cancelar</button>}
-      {sel&&<button className="btn-amber" disabled={busy} onClick={salvar}>{busy?"Adicionando…":"Adicionar à rota"}</button>}
+      <button className="btn-amber" disabled={!paradas.length||busy} onClick={criar}>{busy?"Criando…":"Criar rota e sair ("+paradas.length+")"}</button>
     </div>
   </div></div>;
 }
 
-function SaidaModal({onClose,onSave}){
+/* Conclui a entrega: só a hora (o nº da nota já foi na criação) */
+function ConcluirModal({entrega,onClose,onSave}){
   const [hora,setHora]=useState(hm());
   const [busy,setBusy]=useState(false);
   return <div className="modal-bg" onClick={busy?null:onClose}><div className="modal" style={{maxWidth:360}} onClick={e=>e.stopPropagation()}>
-    <div className="modal-head"><div className="modal-title">Saída da loja</div>{!busy&&<button className="modal-x" onClick={onClose}>×</button>}</div>
+    <div className="modal-head"><div><div className="modal-title">Confirmar entrega</div><div className="sub2">{entrega.cliente}{entrega.nota?" · NF "+entrega.nota:""}</div></div>{!busy&&<button className="modal-x" onClick={onClose}>×</button>}</div>
     <div style={{padding:"18px 20px"}}>
-      <Field label="Hora que está saindo" full><input type="time" value={hora} onChange={e=>setHora(e.target.value)}/></Field>
+      <Field label="Hora da entrega" full><input type="time" value={hora} onChange={e=>setHora(e.target.value)}/></Field>
     </div>
     <div className="modal-foot">
       {!busy&&<button className="btn-ghost" onClick={onClose}>Cancelar</button>}
-      <button className="btn-amber" disabled={busy||!hora} onClick={async()=>{setBusy(true);try{await onSave(hora);}catch(e){setBusy(false);}}}>{busy?"Registrando…":"Registrar saída"}</button>
+      <button className="btn-amber" disabled={!hora||busy} onClick={async()=>{setBusy(true);try{await onSave({hora});}catch(e){setBusy(false);}}}>{busy?"Salvando…":"✓ Confirmar entrega"}</button>
     </div>
   </div></div>;
 }
 
-function ConcluirModal({entrega,onClose,onSave}){
-  const [hora,setHora]=useState(hm());
-  const [nota,setNota]=useState("");
+/* Hodômetro de início/fim de semana */
+function KmModal({campo,kmDoc,onClose,onSave}){
+  const inicio=campo==="kmInicio";
+  const [v,setV]=useState("");
   const [busy,setBusy]=useState(false);
-  const valido=hora&&nota.trim();
-  return <div className="modal-bg" onClick={busy?null:onClose}><div className="modal" style={{maxWidth:380}} onClick={e=>e.stopPropagation()}>
-    <div className="modal-head"><div><div className="modal-title">Confirmar entrega</div><div className="sub2">{entrega.cliente}</div></div>{!busy&&<button className="modal-x" onClick={onClose}>×</button>}</div>
+  const kmIni=kmDoc&&typeof kmDoc.kmInicio==="number"?kmDoc.kmInicio:null;
+  return <div className="modal-bg" onClick={busy?null:onClose}><div className="modal" style={{maxWidth:360}} onClick={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><div className="modal-title">{inicio?"Km — início da semana":"Km — fim da semana"}</div>
+      <div className="sub2">{inicio?"hodômetro da moto na segunda-feira":"hodômetro da moto na sexta-feira"}</div></div>{!busy&&<button className="modal-x" onClick={onClose}>×</button>}</div>
     <div style={{padding:"18px 20px"}}>
-      <div className="form" style={{padding:0,gridTemplateColumns:"1fr 1fr"}}>
-        <Field label="Hora da entrega"><input type="time" value={hora} onChange={e=>setHora(e.target.value)}/></Field>
-        <Field label="Nº da nota"><input value={nota} onChange={e=>setNota(e.target.value)} placeholder="Ex.: 12345" inputMode="numeric"/></Field>
-      </div>
+      {!inicio&&kmIni!=null&&<div className="sub2" style={{marginBottom:10}}>Início da semana: <b style={{color:"var(--text)"}}>{kmIni} km</b>. A diferença será o km rodado.</div>}
+      <Field label="Quilometragem (km)" full><input value={v} onChange={e=>setV(e.target.value)} placeholder="Ex.: 42150" inputMode="numeric" autoFocus/></Field>
+      {!inicio&&kmIni!=null&&/^\d+([.,]\d+)?$/.test(v)&&<div className="sub2" style={{marginTop:8}}>Km da semana: <b style={{color:(parseFloat(v.replace(",","."))-kmIni)>=0?"var(--green)":"var(--red)"}}>{(parseFloat(v.replace(",","."))-kmIni).toFixed(0)} km</b></div>}
     </div>
     <div className="modal-foot">
       {!busy&&<button className="btn-ghost" onClick={onClose}>Cancelar</button>}
-      <button className="btn-amber" disabled={!valido||busy} onClick={async()=>{setBusy(true);try{await onSave({hora,nota:nota.trim()});}catch(e){setBusy(false);}}}>{busy?"Salvando…":"✓ Confirmar entrega"}</button>
+      <button className="btn-amber" disabled={!/^\d+([.,]\d+)?$/.test(v)||busy} onClick={async()=>{setBusy(true);try{await onSave(parseFloat(v.replace(",",".")));}catch(e){setBusy(false);}}}>{busy?"Salvando…":"Salvar km"}</button>
     </div>
   </div></div>;
 }
@@ -1055,6 +1115,7 @@ function App({perfil}){
   const [users,setUsers]=useState([]);
   const [saidas,setSaidas]=useState([]);
   const [clientes,setClientes]=useState([]);
+  const [kmsemana,setKmsemana]=useState([]);
   const [view,setView]=useState("painel");
   const [modo,setModo]=useState("central"); // central | motorista
   const [mbSel,setMbSel]=useState("anthero"); // qual motoboy a central está visualizando
@@ -1069,9 +1130,10 @@ function App({perfil}){
     const u2=db.collection("transferencias").onSnapshot(s=>setTransfers(s.docs.map(d=>({id:d.id,...d.data()}))),e=>console.warn(e));
     const u4=db.collection("saidas").onSnapshot(s=>setSaidas(s.docs.map(d=>({id:d.id,...d.data()}))),e=>console.warn(e));
     const u5=db.collection("clientes").onSnapshot(s=>setClientes(s.docs.map(d=>({id:d.id,...d.data()}))),e=>console.warn(e));
+    const u6=db.collection("kmsemana").onSnapshot(s=>setKmsemana(s.docs.map(d=>({id:d.id,...d.data()}))),e=>console.warn(e));
     let u3=()=>{};
     if(perfil.papel==="admin") u3=db.collection("users").onSnapshot(s=>setUsers(s.docs.map(d=>({uid:d.id,...d.data()}))),e=>console.warn(e));
-    return ()=>{u1();u2();u3();u4();u5();};
+    return ()=>{u1();u2();u3();u4();u5();u6();};
   },[]);
 
   const addDelivery=async novo=>{
@@ -1088,13 +1150,36 @@ function App({perfil}){
     try{await db.collection("entregas").doc(id).update(upd);}catch(e){alert(e.message);}};
   const setStatus=async(id,status)=>{const upd={status,entregueEm:status==="entregue"?horaAgora():null};if(status==="entregue")upd.entregueEmTs=Date.now();
     try{await db.collection("entregas").doc(id).update(upd);}catch(e){alert(e.message);}};
-  // motoboy conclui a entrega informando a hora e o número da nota
-  const concluirEntrega=async(id,{hora,nota})=>{
+  // motoboy conclui a entrega informando apenas a hora (a nota foi na criação)
+  const concluirEntrega=async(id,{hora})=>{
     try{await db.collection("entregas").doc(id).update({
-      status:"entregue", entregueEm:hora||horaAgora(), entregueEmTs:horaParaTs(hora), nota:nota||null
+      status:"entregue", entregueEm:hora||horaAgora(), entregueEmTs:horaParaTs(hora)
     });}catch(e){alert(e.message);}};
   const advanceTransfer=async id=>{try{await db.collection("transferencias").doc(id).update({status:"recebida"});}catch(e){alert(e.message);}};
-  const registrarSaida=async(courier,hora)=>{try{await db.collection("saidas").add({courier,ts:horaParaTs(hora),hora:hora||hm()});}catch(e){alert(e.message);}};
+  // motoboy cria a rota inteira (várias paradas) e a saída é registrada automaticamente
+  const criarRota=async(courier,{loja,paradas})=>{
+    try{
+      const lote=db.batch();
+      paradas.forEach(p=>{
+        const ref=db.collection("entregas").doc();
+        lote.set(ref,{
+          pedido:"M"+String(Date.now()).slice(-6)+Math.floor(Math.random()*90+10),
+          cliente:p.cliente,end:p.end||"",bairro:p.bairro||"",cidade:p.cidade||"",
+          loja:loja||"COL",courier,valor:Number(p.valor)||0,nota:p.nota||null,
+          status:"rota",noPrazo:true,km:0,entregueEm:null,criadoEm:Date.now()
+        });
+      });
+      // saída = momento em que ele terminou de montar a rota e está saindo (agora)
+      lote.set(db.collection("saidas").doc(),{courier,ts:Date.now(),hora:hm(),paradas:paradas.length});
+      await lote.commit();
+    }catch(e){alert("Erro ao criar rota: "+e.message);}
+  };
+  // hodômetro de início/fim de semana → km real da semana
+  const registrarKm=async(courier,campo,valor)=>{
+    const chave=semanaKey(0), key=courier+"_"+chave;
+    const upd={courier,semana:chave,atualizadoEm:Date.now()}; upd[campo]=Number(valor)||0;
+    try{await db.collection("kmsemana").doc(key).set(upd,{merge:true});}catch(e){alert(e.message);}
+  };
   const importarClientes=async(itens,onProg)=>{
     const CH=400; // Firestore aceita até 500 operações por lote
     for(let i=0;i<itens.length;i+=CH){
@@ -1161,7 +1246,7 @@ function App({perfil}){
     <main className="main">
       {isMotoboy ? (
         perfil.motoboyId
-          ? <Motorista dels={dels} courier={perfil.motoboyId} clientes={clientes} onCriar={addDelivery} onSaida={registrarSaida} onConcluir={concluirEntrega}/>
+          ? <Motorista dels={dels} courier={perfil.motoboyId} clientes={clientes} onCriarRota={criarRota} onConcluir={concluirEntrega} onKm={registrarKm} kmDoc={kmsemana.find(k=>k.courier===perfil.motoboyId&&k.semana===semanaKey(0))}/>
           : <div className="empty" style={{maxWidth:420,margin:"40px auto",border:"1px solid var(--line)",borderRadius:14,background:"var(--panel)"}}>
               <div style={{fontSize:30,marginBottom:10}}>⚠️</div>
               <b style={{color:"var(--text)",display:"block",marginBottom:6}}>Conta não vinculada</b>
@@ -1169,14 +1254,14 @@ function App({perfil}){
               Peça a um administrador para editar seu cadastro na aba <b>Usuários</b>.
             </div>
       ) : modo==="motorista" ? (
-        <Motorista dels={dels} courier={mbSel} clientes={clientes}/>
+        <Motorista dels={dels} courier={mbSel} clientes={clientes} kmDoc={kmsemana.find(k=>k.courier===mbSel&&k.semana===semanaKey(0))}/>
       ) : (<>
         {view==="painel"&&<>{dels.length===0&&perfil.papel==="admin"&&<div style={{marginBottom:14}}><button className="newbtn" onClick={seedDemo}>Popular com dados de exemplo</button></div>}<Painel dels={dels} transfers={transfers}/></>}
         {view==="entregas"&&<Entregas dels={dels} advance={advance} setStatus={setStatus} onNova={()=>setShowNova(true)} podeEditar={podeEditar}/>}
         {view==="rotas"&&<Rotas dels={dels}/>}
         {view==="transferencias"&&<Transferencias transfers={transfers} advanceTransfer={advanceTransfer} podeEditar={podeEditar}/>}
         {view==="ranking"&&<Ranking dels={dels}/>}
-        {view==="semana"&&<SemanaReport dels={dels} saidas={saidas}/>}
+        {view==="semana"&&<SemanaReport dels={dels} saidas={saidas} kmsemana={kmsemana}/>}
         {view==="clientes"&&<Clientes dels={dels} clientes={clientes} podeEditar={podeEditar} onImportar={importarClientes}/>}
         {view==="usuarios"&&perfil.papel==="admin"&&<Usuarios users={users}/>}
       </>)}
